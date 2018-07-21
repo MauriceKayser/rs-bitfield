@@ -4,43 +4,42 @@ A Rust macro to generate structures which behave like bitfields.
 
 ## Dependencies
 
-- Rust's [nightly distribution](https://doc.rust-lang.org/book/nightly-rust.html) because of: [interpolate_idents](https://crates.io/crates/interpolate_idents).
-- Rust's [core crate](https://doc.rust-lang.org/core/index.html) because of: [core::mem::transmute_copy](https://doc.rust-lang.org/core/mem/fn.transmute_copy.html) for primitive to enum conversion, and [core::default::Default](https://doc.rust-lang.org/beta/core/default/trait.Default.html).
-- [num](https://rust-num.github.io/num/num/index.html) crate because of: [num::traits::FromPrimitive](https://rust-num.github.io/num/num/trait.FromPrimitive.html) conversion traits.
+- Optionally a [from_primitive](https://github.com/mauricekayser/rs-from-primitive) like crate for enum conversions,
+which generates from_*primitive_type* like functions.
 
 ## Simple example
 
 Imagine the following type which can store up to 8 flags in a `u8` value:
 
 ```rust
-const IS_VISIBLE:    u8 = 1 << 0; // 1
-const IS_INVINCIBLE: u8 = 1 << 1; // 2
-const IS_PLAYER:     u8 = 1 << 2; // 4
+pub const IS_SYSTEM:    u8 = 1 << 0; // 1
+pub const IS_DLL:       u8 = 1 << 1; // 2
+pub const IS_X64:       u8 = 1 << 2; // 4
 // ... up to 5 more flags ...
 
 fn do_stuff(information_flags: u8) { /* ... */ }
 
 // ...
-do_stuff(IS_VISIBLE | IS_PLAYER);
+do_stuff(IS_SYSTEM | IS_X64);
 // ...
 ```
 
 With the help of this crate this can be expressed as follows:
 
 ```rust
-/*
-bitfield! {
-    base type, struct name;
+extern crate bitfield;
+use bitfield::bitfield;
 
-    (, flag name, flag position;)*
-}
+/*
+bitfield!(struct_visibility StructName(struct_base_type) {
+    (flag_visibility flag_name: bit_position,)+
+});
 */
-bitfield! {
-    u8, Information;
-    , visible,    0;
-    , invincible, 1;
-    , player,     2;
-}
+bitfield!(pub Information(u8) {
+    pub system: 0,
+    pub dll:    1,
+    pub x64:    2,
+});
 ```
 
 This results in the following generated code:
@@ -50,21 +49,21 @@ pub struct Information(u8);
 
 #[derive(Default)]
 pub struct InformationInit {
-    visible:    bool,
-    invincible: bool,
-    player:     bool,
+    system: bool,
+    dll:    bool,
+    x64:    bool,
 }
 
 impl Information {
     #[inline]
-    pub fn visible(&self) -> bool {
+    pub fn system(&self) -> bool {
         let max_bit_value = 1;
         let positioned_bits = self.0 >> 0;
         positioned_bits & max_bit_value == 1
     }
 
     #[inline]
-    pub fn set_visible(&mut self, value: bool) {
+    pub fn set_system(&mut self, value: bool) {
         let positioned_bits = 1 << 0;
         let positioned_flags = (value as u8) << 0;
         let cleaned_flags = self.0 & !positioned_bits;
@@ -72,29 +71,29 @@ impl Information {
     }
 
     #[inline]
-    pub fn invincible(&self) -> bool {
+    pub fn dll(&self) -> bool {
         let max_bit_value = 1;
         let positioned_bits = self.0 >> 1;
         positioned_bits & max_bit_value == 1
     }
 
     #[inline]
-    pub fn set_invincible(&mut self, value: bool) {
+    pub fn set_dll(&mut self, value: bool) {
         let positioned_bits = 1 << 1;
         let positioned_flags = (value as u8) << 1;
         let cleaned_flags = self.0 & !positioned_bits;
         self.0 = cleaned_flags | positioned_flags;
     }
 
-    // ... same for `player`.
+    // ... same for `x64`.
 
     #[inline]
     pub fn new(init: InformationInit) -> Self {
         let mut s = Information(0);
 
-        s.set_visible(init.visible);
-        s.set_invincible(init.invincible);
-        s.set_player(init.player);
+        s.set_system(init.system);
+        s.set_dll(init.dll);
+        s.set_x64(init.x64);
 
         s
     }
@@ -103,23 +102,25 @@ impl Information {
 // It can now be constructed (f. e. with default values) and used like so:
 
 let mut info = Information::new(InformationInit {
-    player: true,
+    dll: true,
     ..Default::default()
 });
 
 // ... code ...
 
-if !info.visible() {
+if !info.x64() {
     // ... code ...
-    info.set_visible(true);
+    info.set_system(true);
 }
 ```
 
 ## Detailed Example
 
-This example is based on the 4. parameter `UINT uType` of Microsoft Windows [user32.MessageBox function](https://msdn.microsoft.com/en-us/library/windows/desktop/ms645505.aspx) and not only stores `bool`ean flags, but also `enum` values.
+This example is based on the 4. parameter `UINT uType` of Microsoft Windows
+[user32.MessageBox function](https://msdn.microsoft.com/en-us/library/windows/desktop/ms645505.aspx) and not only stores
+`bool`ean flags, but also `enum` values.
 
-A Microsoft Visual C++ `UINT` is a Rust `u32`. So all constants for the parameter `uType` can be written as follows:
+A Microsoft Visual C++ `UINT` is a `u32` in Rust. So all constants for the parameter `uType` can be written as follows:
 
 ```rust
 // Buttons
@@ -159,7 +160,10 @@ const MB_RIGHT_TO_LEFT_READING:      u32 = 1 << 20;
 const MB_SERVICE_NOTIFICATION:       u32 = 1 << 21;
 ```
 
-One problem is that `u32` is not type safe like an `enum` value, another is that the usage of an `u32` is error prone, because several flags of the same "type group" like a button can be `|`-ed together (f. e. `MB_BUTTON_ABORT_RETRY_IGNORE | MB_BUTTON_YES_NO`) which might result in some unexpected behaviour. Checking if certain flags are set is also unnecessarily complicated.
+One problem is that `u32` is not type safe like an `enum` value, another is that the usage of an `u32` is error prone,
+because several flags of the same "type group" like a button can be `|`-ed together
+(f. e. `MB_BUTTON_ABORT_RETRY_IGNORE | MB_BUTTON_YES_NO`) which might result in some unexpected behaviour.
+Checking if certain flags are set is also unnecessarily complicated.
 
 The previously mentioned "type groups" are saved in the `u32` value as follows:
 
@@ -173,9 +177,13 @@ The previously mentioned "type groups" are saved in the `u32` value as follows:
 All of the "type groups" can be expressed by rebasing them (removing the trailing zeros):
 
 ```rust
+#[macro_use]
+extern crate from_primitive;
+
 #[repr(u32)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, FromPrimitive, PartialEq)]
 pub enum Button {
+    #[default]
     Ok,
     OkCancel,
     AbortRetryIgnore,
@@ -185,24 +193,20 @@ pub enum Button {
     CancelTryContinue
 }
 
-impl Default for Button { fn default() -> Self { Button::Ok } }
-enum_from_primitive!(Button, |x| x <= Button::CancelTryContinue as u64);
-
 #[repr(u32)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, FromPrimitive, PartialEq)]
 pub enum DefaultButton {
+    #[default]
     One,
     Two,
     Three,
     Four
 }
 
-impl Default for DefaultButton { fn default() -> Self { DefaultButton::One } }
-enum_from_primitive!(DefaultButton, |x| x <= DefaultButton::Four as u64);
-
 #[repr(u32)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, FromPrimitive, PartialEq)]
 pub enum Icon {
+    #[default]
     None,
     Stop,
     Question,
@@ -210,46 +214,40 @@ pub enum Icon {
     Information
 }
 
-impl Default for Icon { fn default() -> Self { Icon::None } }
-enum_from_primitive!(Icon, |x| x <= Icon::Information as u64);
-
 #[repr(u32)]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, FromPrimitive, PartialEq)]
 pub enum Modality {
+    #[default]
     Application,
     System,
     Task
 }
-
-impl Default for Modality { fn default() -> Self { Modality::Application } }
-enum_from_primitive!(Modality, |x| x <= Modality::Task as u64);
 ```
 
 Now the `bitfield` macro can be used as follows:
 
 ```rust
 /*
-bitfield! {
-    base type, struct name;
-
-    (         , flag name, flag position;)*
-    (enum type, flag name, flag position, amount of bits;)*
-}
+bitfield!(struct_visibility StructName(struct_base_type) {
+    (
+        (flag_visibility flag_name: bit_position,) |
+        (flag_visibility flag_name: flag_base_type(bit_position, bit_amount),)
+    )+
+});
 */
-bitfield! {
-    u32, Style;
-    ,              help,                  14;
-    ,              foreground,            16;
-    ,              default_desktop_only,  17;
-    ,              top_most,              18;
-    ,              right,                 19;
-    ,              right_to_left_reading, 20;
-    ,              service_notification,  21;
-    Button,        button,                 0, 3;
-    Icon,          icon,                   4, 3;
-    DefaultButton, default_button,         8, 2;
-    Modality,      modality,              12, 2;
-}
+bitfield!(pub Style(u32) {
+    pub button:                 Button(0, 3),
+    pub icon:                   Icon(4, 3),
+    pub default_button:         DefaultButton(8, 2),
+    pub modality:               Modality(12, 2),
+    pub help:                   14,
+    pub foreground:             16,
+    pub default_desktop_only:   17,
+    pub top_most:               18,
+    pub right:                  19,
+    pub right_to_left_reading:  20,
+    pub service_notification:   21,
+});
 ```
 
 This results in the following generated code:
@@ -259,64 +257,68 @@ pub struct Style(u32);
 
 #[derive(Default)]
 pub struct StyleInit {
-    help:       bool,
-    foreground: bool,
-    // ...
     button:     Button,
     icon:       Icon,
+    // ...
+    help:       bool,
+    foreground: bool,
     // ...
 }
 
 impl Style {
     #[inline]
+    pub fn button(&self) -> result::Result<Button, u32> {
+        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
+        let positioned_bits = self.0 >> 0;
+        let value = positioned_bits & MAX_BIT_VALUE;
+        let enum_value = Button::from_u32(value as u32);
+        if enum_value.is_some() {
+            Ok(enum_value.unwrap())
+        } else { Err(value) }
+    }
+
+    #[inline]
+    pub fn set_button(&mut self, value: Button) {
+        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
+        const POSITIONED_BITS = MAX_BIT_VALUE << 0;
+        let positioned_flags = (value as u32) << 0;
+        let cleaned_flags = self.0 & !POSITIONED_BITS;
+        self.0 = cleaned_flags | positioned_flags;
+    }
+
+    #[inline]
+    pub fn icon(&self) -> result::Result<Icon, u32> {
+        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
+        let positioned_bits = self.0 >> 4;
+        let value = positioned_bits & MAX_BIT_VALUE;
+        let enum_value = Icon::from_u32(value as u32);
+        if enum_value.is_some() {
+            Ok(enum_value.unwrap())
+        } else { Err(value) }
+    }
+
+    #[inline]
+    pub fn set_icon(&mut self, value: Icon) {
+        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
+        const POSITIONED_BITS = MAX_BIT_VALUE << 4;
+        let positioned_flags = (value as u32) << 4;
+        let cleaned_flags = self.0 & !POSITIONED_BITS;
+        self.0 = cleaned_flags | positioned_flags;
+    }
+
+    // ...
+
+    #[inline]
     pub fn help(&self) -> bool {
-        let max_bit_value = 1;
+        let max_bit_value: u32 = 1;
         let positioned_bits = self.0 >> 14;
         positioned_bits & max_bit_value == 1
     }
 
     #[inline]
     pub fn set_help(&mut self, value: bool) {
-        let positioned_bits: u32 = 1 << 0;
+        let positioned_bits: u32 = 1 << 14;
         let positioned_flags = (value as u32) << 14;
-        let cleaned_flags = self.0 & !positioned_bits;
-        self.0 = cleaned_flags | positioned_flags;
-    }
-
-    // ...
-
-    #[inline]
-    pub fn button(&self) -> core::result::Result<Button, u32> {
-        let max_bit_value: u32 = (1 << 3) - 1;
-        let positioned_bits = self.0 >> 0;
-        let value = positioned_bits & max_bit_value;
-        let enum_value = Button::from_u64(value as u64);
-        if enum_value.is_some() { Ok(enum_value.unwrap()) } else { Err(value) }
-    }
-
-    #[inline]
-    pub fn set_button(&mut self, value: Button) {
-        let max_bit_value: u32 = (1 << 3) - 1;
-        let positioned_bits = max_bit_value << 0;
-        let positioned_flags = (value as u32) << 0;
-        let cleaned_flags = self.0 & !positioned_bits;
-        self.0 = cleaned_flags | positioned_flags;
-    }
-
-    #[inline]
-    pub fn icon(&self) -> core::result::Result<Icon, u32> {
-        let max_bit_value: u32 = (1 << 3) - 1;
-        let positioned_bits = self.0 >> 4;
-        let value = positioned_bits & max_bit_value;
-        let enum_value = Icon::from_u64(value as u64);
-        if enum_value.is_some() { Ok(enum_value.unwrap()) } else { Err(value) }
-    }
-
-    #[inline]
-    pub fn set_icon(&mut self, value: Icon) {
-        let max_bit_value: u32 = (1 << 3) - 1;
-        let positioned_bits = max_bit_value << 4;
-        let positioned_flags = (value as u32) << 4;
         let cleaned_flags = self.0 & !positioned_bits;
         self.0 = cleaned_flags | positioned_flags;
     }
@@ -327,12 +329,12 @@ impl Style {
     pub fn new(init: StyleInit) -> Self {
         let mut s = Style(0);
 
-        s.set_help(init.help);
-        s.set_foreground(init.foreground);
-        // ...
-
         s.set_button(init.button);
         s.set_icon(init.icon);
+        // ...
+
+        s.set_help(init.help);
+        s.set_foreground(init.foreground);
         // ...
 
         s
@@ -360,7 +362,7 @@ if style.right() && style.button() == Button::Ok {
 
 ## TODO
 
-I'm very new to Rust, so the macro is currently really inflexible:
-
-- Make `pub` optional for the structure.
-- Make `bool` and `enum` flags position independent / mixable.
+- Caculate whether biggest enum value fits in `bit_amount`.
+- Allow `Expr` for flag offsets and ranges.
+- Generate function `unused_bits() -> #base_type { /* ... */ }`
+- Check for unnecessary `allow_overlap` attributes and attribute members.
