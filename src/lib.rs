@@ -360,9 +360,49 @@
 //! }
 //! ```
 //!
+//! ## Overlap Example
+//!
+//! Some systems reuse/overlap bits for different meanings, for example Microsoft Windows
+//! [Memory Protection Constants](https://docs.microsoft.com/en-us/windows/desktop/Memory/memory-protection-constants)
+//! type has 2x2 flags which overlap: `PAGE_TARGETS_INVALID` with `PAGE_TARGETS_NO_UPDATE` and
+//! `PAGE_ENCLAVE_THREAD_CONTROL` with `PAGE_ENCLAVE_UNVALIDATED`.
+//! By default overlapping fields will result in a `panic`, but it can be disabled by explicitly
+//! indicating that the overlapping is wanted:
+//!
+//! ```rust
+//! bitfield!(pub MemoryProtection(u32) {
+//!     pub no_access:              0,
+//!
+//!     pub read_only:              1,
+//!     pub read_write:             2,
+//!     pub write_copy:             3,
+//!
+//!     pub execute:                4,
+//!     pub execute_read:           5,
+//!     pub execute_read_write:     6,
+//!     pub execute_write_copy:     7,
+//!
+//!     pub guard:                  8,
+//!     pub no_cache:               9,
+//!    pub write_combine:          10,
+//!
+//!     #[allow_overlap(targets_no_update)]
+//!     pub targets_invalid:        30,
+//!     #[allow_overlap(targets_invalid)]
+//!     pub targets_no_update:      30,
+//!
+//!     #[allow_overlap(enclave_unvalidated)]
+//!     pub enclave_thread_control: 31,
+//!     #[allow_overlap(enclave_thread_control)]
+//!     pub enclave_unvalidated:    31,
+//! });
+//! ```
+//!
+//! This behaviour also works for enum values with more than one bit in size.
+//!
 //! ## TODO
 //!
-//! - Caculate whether biggest enum value fits in `bit_amount`.
+//! - Calculate whether the biggest enum value fits in `bit_amount`.
 //! - Allow `Expr` for flag offsets and ranges.
 //! - Generate function `unused_bits() -> #base_type { /* ... */ }`
 //! - Check for unnecessary `allow_overlap` attributes and attribute members.
@@ -514,7 +554,7 @@ fn parse_bitfield(input: &BitField) -> proc_macro::TokenStream {
             }
 
             if name_left == name_right {
-                panic!("Duplicate field name: \"{}\"!", name_left);
+                panic!("Duplicate field name: `{}`!", name_left);
             }
         }
     }
@@ -535,10 +575,10 @@ fn parse_bitfield(input: &BitField) -> proc_macro::TokenStream {
                 match available_bits {
                     Ok(value) => {
                         if bit.value() > value {
-                            panic!("\"{}\": {} is outside of the valid range of {} bits!", name, bit.value(), value);
+                            panic!("`{}`: {} is outside of the valid range of {} bits!", name, bit.value(), value);
                         }
                     },
-                    _ => panic!("\"{}\" is an unsupported primitive type!", base_type)
+                    _ => panic!("`{}` is an unsupported primitive type!", base_type)
                 }
 
                 let overlap = extract_overlap(&mut attributes);
@@ -591,10 +631,10 @@ fn parse_bitfield(input: &BitField) -> proc_macro::TokenStream {
                 match available_bits {
                     Ok(value) => {
                         if bit.value() + amount.value() > value {
-                            panic!("\"{}\": {} + {} = {} is outside of the valid range of {} bits!", name, bit.value(), amount.value(), bit.value() + amount.value(), value);
+                            panic!("`{}`: {} + {} = {} is outside of the valid range of {} bits!", name, bit.value(), amount.value(), bit.value() + amount.value(), value);
                         }
                     },
-                    _ => panic!("\"{}\" is an unsupported primitive type!", base_type)
+                    _ => panic!("`{}` is an unsupported primitive type!", base_type)
                 }
 
                 let overlap = extract_overlap(&mut attributes);
@@ -663,7 +703,7 @@ fn parse_bitfield(input: &BitField) -> proc_macro::TokenStream {
                     match check_overlap(&bounds_left, &bounds_right) {
                         OverlapStatus::NoOverlap => break,
                         OverlapStatus::AllowedOverlap => (),
-                        OverlapStatus::Overlap => panic!(format!("{} overlaps with {}! Did you forget an allow_overlap attribute?", bounds_left.name, bounds_right.name))
+                        OverlapStatus::Overlap => panic!(format!("`{}` overlaps with `{}`! Did you forget an `allow_overlap` attribute?", bounds_left.name, bounds_right.name))
                     }
                 }
             }
@@ -718,7 +758,7 @@ fn check_overlap(bounds_left: &FieldBounds, bounds_right: &FieldBounds) -> Overl
             check_overlap_names(bounds_left, bounds_right)
         }
         std::cmp::Ordering::Equal => check_overlap_names(bounds_left, bounds_right),
-        std::cmp::Ordering::Greater => panic!(format!("Wrong order of {} and {}! THIS SHOULD NEVER HAPPEN!", bounds_left.name, bounds_right.name))
+        std::cmp::Ordering::Greater => panic!(format!("Wrong order of `{}` and `{}`! THIS SHOULD NEVER HAPPEN!", bounds_left.name, bounds_right.name))
     }
 }
 
@@ -765,7 +805,7 @@ fn extract_overlap(attributes: &mut Vec<Attribute>) -> Option<Vec<Ident>> {
         }
 
         match attributes[i].interpret_meta() {
-            None => panic!("Couldn't parse allow_overlap attribute!"),
+            None => panic!("Couldn't parse `allow_overlap` attribute!"),
             Some(meta) => {
                 match meta {
                     syn::Meta::List(meta_list) => {
@@ -783,7 +823,7 @@ fn extract_overlap(attributes: &mut Vec<Attribute>) -> Option<Vec<Ident>> {
                             }
                         }
                     },
-                    _ => panic!("Must specify allowed overlapping names: #[allow_overlap(name1, name2, ...)]!")
+                    _ => panic!("Must specify allowed overlapping names: `#[allow_overlap(name1, name2, ...)]`!")
                 }
             }
         }

@@ -360,9 +360,49 @@ if style.right() && style.button() == Button::Ok {
 }
 ```
 
+## Overlap Example
+
+Some systems reuse/overlap bits for different meanings, for example Microsoft Windows
+[Memory Protection Constants](https://docs.microsoft.com/en-us/windows/desktop/Memory/memory-protection-constants)
+type has 2x2 flags which overlap: `PAGE_TARGETS_INVALID` with `PAGE_TARGETS_NO_UPDATE` and
+`PAGE_ENCLAVE_THREAD_CONTROL` with `PAGE_ENCLAVE_UNVALIDATED`.
+By default overlapping fields will result in a `panic`, but it can be disabled by explicitly
+indicating that the overlapping is wanted:
+
+```rust
+bitfield!(pub MemoryProtection(u32) {
+    pub no_access:              0,
+
+    pub read_only:              1,
+    pub read_write:             2,
+    pub write_copy:             3,
+
+    pub execute:                4,
+    pub execute_read:           5,
+    pub execute_read_write:     6,
+    pub execute_write_copy:     7,
+
+    pub guard:                  8,
+    pub no_cache:               9,
+    pub write_combine:          10,
+
+    #[allow_overlap(targets_no_update)]
+    pub targets_invalid:        30,
+    #[allow_overlap(targets_invalid)]
+    pub targets_no_update:      30,
+
+    #[allow_overlap(enclave_unvalidated)]
+    pub enclave_thread_control: 31,
+    #[allow_overlap(enclave_thread_control)]
+    pub enclave_unvalidated:    31,
+});
+```
+
+This behaviour also works for enum values with more than one bit in size.
+
 ## TODO
 
-- Caculate whether biggest enum value fits in `bit_amount`.
+- Calculate whether the biggest enum value fits in `bit_amount`.
 - Allow `Expr` for flag offsets and ranges.
 - Generate function `unused_bits() -> #base_type { /* ... */ }`
 - Check for unnecessary `allow_overlap` attributes and attribute members.
