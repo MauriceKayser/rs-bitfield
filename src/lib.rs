@@ -1,124 +1,96 @@
-//! # Bitfields for Rust
+//! # Bit fields for Rust
 //!
-//! A Rust macro to generate structures which behave like bitfields.
+//! Provides structures which simplify bit level access to primitive types in Rust.
 //!
 //! ## Dependencies
 //!
-//! - Optionally a [from_primitive](https://github.com/mauricekayser/rs-from-primitive) like crate for enum conversions,
-//! which generates from_*primitive_type* like functions.
+//! None, the types work in a `#[no_std]` environment.
+//!
+//! ## Description
+//!
+//! A bit field can store simple boolean flags, as well as values of multiple bits in size.
+//! A `BitField` structure, for example `BitField16`, has the following 5 `const` functions:
+//!
+//! - `const fn new() -> Self`
+//! - `const fn bit(&self, position: u8) -> bool`
+//! - `const fn set_bit(&self, position: u8, value: bool) -> Self`
+//! - `const fn field(&self, position: u8, size: u8) -> u16`
+//! - `const fn set_field(&self, position: u8, size: u8, value: u16) -> Self`
+//!
+//! The setters return a modified copy of their own value, so the builder pattern can be used
+//! to construct such a bit field.
 //!
 //! ## Simple example
 //!
-//! Imagine the following type which can store up to 8 flags in a `u8` value:
+//! Imagine the following type which can store up to 16 flags in a `u16` value:
 //!
-//! ```rust
-//! pub const IS_SYSTEM:    u8 = 1 << 0; // 1
-//! pub const IS_DLL:       u8 = 1 << 1; // 2
-//! pub const IS_X64:       u8 = 1 << 2; // 4
-//! // ... up to 5 more flags ...
+//! ```ignore
+//! pub const IS_SYSTEM:    u16 = 1 << 0; // 1
+//! pub const IS_LIBRARY:   u16 = 1 << 1; // 2
+//! // Undefined:                 1 << 2; // 4
+//! pub const IS_X64:       u16 = 1 << 3; // 8
+//! // ... up to 12 more flags ...
 //!
-//! fn do_stuff(information_flags: u8) { /* ... */ }
+//! extern "C" fn bla() -> u16;
+//! extern "C" fn foo(executable_flags: u16);
 //!
-//! // ...
-//! do_stuff(IS_SYSTEM | IS_X64);
-//! // ...
+//! // Usage
+//!
+//! let mut executable_flags = bla();
+//!
+//! // Add the system and x64 flags.
+//! executable_flags |= IS_SYSTEM | IS_X64;
+//!
+//! // Execute `foo` if the library flag is set.
+//! if (executable_flags & IS_LIBRARY) != 0 {
+//!     foo(executable_flags);
+//! }
 //! ```
 //!
 //! With the help of this crate this can be expressed as follows:
 //!
-//! ```rust
-//! extern crate bitfield;
-//! use bitfield::bitfield;
+//! ```ignore
+//! #[repr(C)]
+//! pub struct ExecutableFlags(bitfield::BitField16);
 //!
-//! /*
-//! bitfield!(struct_visibility StructName(struct_base_type) {
-//!     (flag_visibility flag_name: bit_position,)+
-//! });
-//! */
-//! bitfield!(pub Information(u8) {
-//!     pub system: 0,
-//!     pub dll:    1,
-//!     pub x64:    2,
-//! });
-//! ```
-//!
-//! This results in the following generated code:
-//!
-//! ```rust
-//! pub struct Information(u8);
-//!
-//! #[derive(Default)]
-//! pub struct InformationInit {
-//!     system: bool,
-//!     dll:    bool,
-//!     x64:    bool,
+//! #[repr(u8)]
+//! pub enum ExecutableFlag {
+//!     System,
+//!     Library,
+//!     X64 = 3
 //! }
 //!
-//! impl Information {
-//!     #[inline]
-//!     pub fn system(&self) -> bool {
-//!         let max_bit_value = 1;
-//!         let positioned_bits = self.0 >> 0;
-//!         positioned_bits & max_bit_value == 1
+//! impl ExecutableFlags {
+//!     pub const fn new() -> Self {
+//!         Self(bitfield::BitField16::new())
 //!     }
 //!
-//!     #[inline]
-//!     pub fn set_system(&mut self, value: bool) {
-//!         let positioned_bits = 1 << 0;
-//!         let positioned_flags = (value as u8) << 0;
-//!         let cleaned_flags = self.0 & !positioned_bits;
-//!         self.0 = cleaned_flags | positioned_flags;
+//!     pub const fn is_set(&self, flag: ExecutableFlag) -> bool {
+//!         self.0.bit(flag as u8)
 //!     }
 //!
-//!     #[inline]
-//!     pub fn dll(&self) -> bool {
-//!         let max_bit_value = 1;
-//!         let positioned_bits = self.0 >> 1;
-//!         positioned_bits & max_bit_value == 1
-//!     }
-//!
-//!     #[inline]
-//!     pub fn set_dll(&mut self, value: bool) {
-//!         let positioned_bits = 1 << 1;
-//!         let positioned_flags = (value as u8) << 1;
-//!         let cleaned_flags = self.0 & !positioned_bits;
-//!         self.0 = cleaned_flags | positioned_flags;
-//!     }
-//!
-//!     // ... same for `x64`.
-//!
-//!     #[inline]
-//!     pub fn new(init: InformationInit) -> Self {
-//!         let mut s = Information(0);
-//!
-//!         s.set_system(init.system);
-//!         s.set_dll(init.dll);
-//!         s.set_x64(init.x64);
-//!
-//!         s
+//!     pub const fn set(&self, flag: ExecutableFlag, value: bool) -> Self {
+//!         Self(self.0.set_bit(flag as u8, value))
 //!     }
 //! }
 //!
-//! // It can now be constructed (f. e. with default values) and used like so:
+//! extern "C" fn bla() -> ExecutableFlags;
+//! extern "C" fn foo(executable_flags: ExecutableFlags);
 //!
-//! let mut info = Information::new(InformationInit {
-//!     dll: true,
-//!     ..Default::default()
-//! });
+//! // Usage
 //!
-//! // ... code ...
+//! let executable_flags = bla().set(ExecutableFlag::System).set(ExecutableFlag::X64);
 //!
-//! if !info.x64() {
-//!     // ... code ...
-//!     info.set_system(true);
+//! if executable_flags.is_set(ExecutableFlag::Library) {
+//!     foo(executable_flags);
 //! }
 //! ```
 //!
 //! ## Detailed Example
 //!
 //! This example is based on the 4. parameter `UINT uType` of Microsoft Windows
-//! [user32.MessageBox function](https://msdn.microsoft.com/en-us/library/windows/desktop/ms645505.aspx) and not only stores
-//! `bool`ean flags, but also `enum` values.
+//! [user32.MessageBox function](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messagebox)
+//! which not only stores boolean flags, but also fields with more than one bit in size.
 //!
 //! A Microsoft Visual C++ `UINT` is a `u32` in Rust. So all constants for the parameter `uType` can be written as follows:
 //!
@@ -161,29 +133,25 @@
 //! ```
 //!
 //! One problem is that `u32` is not type safe like an `enum` value, another is that the usage of an `u32` is error prone,
-//! because several flags of the same "type group" like a button can be `|`-ed together
+//! because several "flags" of the same "type group" (called a "field"), like a button, can be `|`-ed together
 //! (f. e. `MB_BUTTON_ABORT_RETRY_IGNORE | MB_BUTTON_YES_NO`) which might result in some unexpected behaviour.
-//! Checking if certain flags are set is also unnecessarily complicated.
+//! Checking if certain fields, like a button, have a specific value is also unnecessarily complicated (bit fiddling
+//! operators like `>>` and `&` etc. are necessary).
 //!
-//! The previously mentioned "type groups" are saved in the `u32` value as follows:
+//! The previously mentioned fields are stored in the `u32` value as follows:
 //!
-//! | Type            | Min. value (w/o 0) | Max. value | Storage bits                                            | Max. storable value             |
-//! | --------------- | ------------------ | ---------- | ------------------------------------------------------- | ------------------------------- |
-//! | `Button`        | 0x1                | 0x6        | 0b0000_0000_0000_0000_0000_0000_0000_0**XXX** (0 - 2)   | `((1 << 3) - 1) <<  0` = 0x7    |
-//! | `Icon`          | 0x10               | 0x40       | 0b0000_0000_0000_0000_0000_0000_0**XXX**_0000 (4 - 6)   | `((1 << 3) - 1) <<  4` = 0x70   |
-//! | `DefaultButton` | 0x100              | 0x300      | 0b0000_0000_0000_0000_0000_00**XX**_0000_0000 (8 - 9)   | `((1 << 2) - 1) <<  8` = 0x300  |
-//! | `Modality`      | 0x1000             | 0x2000     | 0b0000_0000_0000_0000_00**XX**_0000_0000_0000 (12 - 13) | `((1 << 2) - 1) << 12` = 0x3000 |
+//! | Type            | Min. def. value (`> 0`) | Max. def. value | Storage bits                                            | Max. storable value             |
+//! | --------------- | ----------------------- | --------------- | ------------------------------------------------------- | ------------------------------- |
+//! | `Button`        | 0x1                     | 0x6             | 0b0000_0000_0000_0000_0000_0000_0000_**XXXX** (0 - 4)   | `((1 << 4) - 1) <<  0` = 0x7    |
+//! | `Icon`          | 0x10                    | 0x40            | 0b0000_0000_0000_0000_0000_0000_**XXXX**_0000 (4 - 8)   | `((1 << 4) - 1) <<  4` = 0x70   |
+//! | `DefaultButton` | 0x100                   | 0x300           | 0b0000_0000_0000_0000_0000_**XXXX**_0000_0000 (8 - 12)  | `((1 << 4) - 1) <<  8` = 0x700  |
+//! | `Modality`      | 0x1000                  | 0x2000          | 0b0000_0000_0000_0000_00**XX**_0000_0000_0000 (12 - 13) | `((1 << 2) - 1) << 12` = 0x3000 |
 //!
-//! All of the "type groups" can be expressed by rebasing them (removing the trailing zeros):
+//! All of the fields can be expressed by shifting them to the right (removing the trailing zeros):
 //!
 //! ```rust
-//! #[macro_use]
-//! extern crate from_primitive;
-//!
-//! #[repr(u32)]
-//! #[derive(Debug, FromPrimitive, PartialEq)]
+//! #[repr(u8)]
 //! pub enum Button {
-//!     #[default]
 //!     Ok,
 //!     OkCancel,
 //!     AbortRetryIgnore,
@@ -191,645 +159,361 @@
 //!     YesNo,
 //!     RetryCancel,
 //!     CancelTryContinue
+//!     // Value `7` is unused.
 //! }
 //!
-//! #[repr(u32)]
-//! #[derive(Debug, FromPrimitive, PartialEq)]
+//! #[repr(u8)]
 //! pub enum DefaultButton {
-//!     #[default]
 //!     One,
 //!     Two,
 //!     Three,
 //!     Four
+//!     // Values `4` - `7` are unused.
 //! }
 //!
-//! #[repr(u32)]
-//! #[derive(Debug, FromPrimitive, PartialEq)]
+//! #[repr(u8)]
 //! pub enum Icon {
-//!     #[default]
 //!     None,
-//!     Stop,
+//!     Error,
 //!     Question,
-//!     Exclamation,
+//!     Warning,
 //!     Information
+//!     // Values `5` - `7` are unused.
 //! }
 //!
-//! #[repr(u32)]
-//! #[derive(Debug, FromPrimitive, PartialEq)]
+//! #[repr(u8)]
 //! pub enum Modality {
-//!     #[default]
 //!     Application,
 //!     System,
 //!     Task
+//!     // Value `3` is unused.
 //! }
 //! ```
 //!
-//! Now the `bitfield` macro can be used as follows:
+//! The write- or construct-only variant of the `Styles` structure can be built with the
+//! `BitField32` type like so:
 //!
-//! ```rust
-//! /*
-//! bitfield!(struct_visibility StructName(struct_base_type) {
-//!     (
-//!         (flag_visibility flag_name: bit_position,) |
-//!         (flag_visibility flag_name: flag_base_type(bit_position, bit_amount),)
-//!     )+
-//! });
-//! */
-//! bitfield!(pub Style(u32) {
-//!     pub button:                 Button(0, 3),
-//!     pub icon:                   Icon(4, 3),
-//!     pub default_button:         DefaultButton(8, 2),
-//!     pub modality:               Modality(12, 2),
-//!     pub help:                   14,
-//!     pub foreground:             16,
-//!     pub default_desktop_only:   17,
-//!     pub top_most:               18,
-//!     pub right:                  19,
-//!     pub right_to_left_reading:  20,
-//!     pub service_notification:   21,
-//! });
-//! ```
+//! ```ignore
+//! #[repr(C)]
+//! pub struct Styles(bitfield::BitField32);
 //!
-//! This results in the following generated code:
-//!
-//! ```rust
-//! pub struct Style(u32);
-//!
-//! #[derive(Default)]
-//! pub struct StyleInit {
-//!     button:     Button,
-//!     icon:       Icon,
-//!     // ...
-//!     help:       bool,
-//!     foreground: bool,
-//!     // ...
+//! #[repr(u8)]
+//! pub enum Style {
+//!     Help = 14,
+//!     SetForeground = 16,
+//!     DefaultDesktopOnly,
+//!     TopMost,
+//!     Right,
+//!     RightToLeftReading,
+//!     ServiceNotification
 //! }
 //!
-//! impl Style {
-//!     #[inline]
-//!     pub fn button(&self) -> result::Result<Button, u32> {
-//!         const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-//!         let positioned_bits = self.0 >> 0;
-//!         let value = positioned_bits & MAX_BIT_VALUE;
-//!         let enum_value = Button::from_u32(value as u32);
-//!         if enum_value.is_some() {
-//!             Ok(enum_value.unwrap())
-//!         } else { Err(value) }
+//! impl Styles {
+//!     pub const fn new() -> Self {
+//!         Self(bitfield::BitField32::new())
 //!     }
 //!
-//!     #[inline]
-//!     pub fn set_button(&mut self, value: Button) {
-//!         const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-//!         const POSITIONED_BITS = MAX_BIT_VALUE << 0;
-//!         let positioned_flags = (value as u32) << 0;
-//!         let cleaned_flags = self.0 & !POSITIONED_BITS;
-//!         self.0 = cleaned_flags | positioned_flags;
+//!     pub const fn set(&self, style: Style, value: bool) -> Self {
+//!         Self(self.0.set_bit(style as u8, value))
 //!     }
 //!
-//!     #[inline]
-//!     pub fn icon(&self) -> result::Result<Icon, u32> {
-//!         const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-//!         let positioned_bits = self.0 >> 4;
-//!         let value = positioned_bits & MAX_BIT_VALUE;
-//!         let enum_value = Icon::from_u32(value as u32);
-//!         if enum_value.is_some() {
-//!             Ok(enum_value.unwrap())
-//!         } else { Err(value) }
+//!     // Field setters
+//!
+//!     pub const fn set_button(&self, button: Button) -> Self {
+//!         Self(self.0.set_field(0, 4, button as u32))
 //!     }
 //!
-//!     #[inline]
-//!     pub fn set_icon(&mut self, value: Icon) {
-//!         const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-//!         const POSITIONED_BITS = MAX_BIT_VALUE << 4;
-//!         let positioned_flags = (value as u32) << 4;
-//!         let cleaned_flags = self.0 & !POSITIONED_BITS;
-//!         self.0 = cleaned_flags | positioned_flags;
+//!     pub const fn set_icon(&self, icon: Icon) -> Self {
+//!         Self(self.0.set_field(4, 4, icon as u32))
 //!     }
 //!
-//!     // ...
-//!
-//!     #[inline]
-//!     pub fn help(&self) -> bool {
-//!         let max_bit_value: u32 = 1;
-//!         let positioned_bits = self.0 >> 14;
-//!         positioned_bits & max_bit_value == 1
+//!     pub const fn set_default_button(&self, default_button: DefaultButton) -> Self {
+//!         Self(self.0.set_field(8, 4, default_button as u32))
 //!     }
 //!
-//!     #[inline]
-//!     pub fn set_help(&mut self, value: bool) {
-//!         let positioned_bits: u32 = 1 << 14;
-//!         let positioned_flags = (value as u32) << 14;
-//!         let cleaned_flags = self.0 & !positioned_bits;
-//!         self.0 = cleaned_flags | positioned_flags;
-//!     }
-//!
-//!     // ...
-//!
-//!     #[inline]
-//!     pub fn new(init: StyleInit) -> Self {
-//!         let mut s = Style(0);
-//!
-//!         s.set_button(init.button);
-//!         s.set_icon(init.icon);
-//!         // ...
-//!
-//!         s.set_help(init.help);
-//!         s.set_foreground(init.foreground);
-//!         // ...
-//!
-//!         s
+//!     pub const fn set_modality(&self, modality: Modality) -> Self {
+//!         Self(self.0.set_field(12, 2, modality as u32))
 //!     }
 //! }
 //! ```
 //!
-//! It can now be constructed (f. e. with default values) and used like so:
+//! It can now be constructed and used as follows:
 //!
-//! ```rust
-//! let mut style = Style::new(StyleInit {
-//!     button: Button::OkCancel,
-//!     icon: Icon::Information,
-//!     right: true,
-//!     ..Default::default()
-//! });
+//! ```ignore
+//! let styles = Styles::new()
+//!     .set_button(Button::OkCancel)
+//!     .set_icon(Icon::Information)
+//!     .set(Style::Right, true)
+//!     .set(Style::TopMost, true);
 //!
-//! // ... code ...
+//! let result = user32::MessageBoxW(/* ... */, styles);
+//! ```
 //!
-//! if style.right() && style.button() == Button::Ok {
-//!     // ... code ...
-//!     style.set_button(Button::OkCancel);
+//! For the read-write variant of the `Styles` structure the following code has to be added:
+//!
+//! ```ignore
+//! use core::convert::TryFrom;
+//!
+//! impl Styles {
+//!     pub const fn is_set(&self, style: Style) -> bool {
+//!         self.0.bit(style as u8)
+//!     }
+//!
+//!     // Field getters
+//!     //
+//!     // They must return a `core::result::Result`, because the bits can represent values which
+//!     // are not among the defined enumeration variants.
+//!     //
+//!     // They can not be `const` until [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632) is done.
+//!
+//!     pub fn button(&self) -> Result<Button, u8> {
+//!         Button::try_from(self.0.field(0, 4) as u8)
+//!     }
+//!
+//!     pub fn icon(&self) -> Result<Icon, u8> {
+//!         Icon::try_from(self.0.field(4, 4) as u8)
+//!     }
+//!
+//!     pub fn default_button(&self) -> Result<DefaultButton, u8> {
+//!         DefaultButton::try_from(self.0.field(8, 4) as u8)
+//!     }
+//!
+//!     pub fn modality(&self) -> Result<Modality, u8> {
+//!         Modality::try_from(self.0.field(12, 2) as u8)
+//!     }
+//! }
+//!
+//! // Convert from `u8` to our enumerations, necessary for the `Field getters` part.
+//!
+//! impl core::convert::TryFrom<u8> for Button {
+//!     type Error = u8;
+//!
+//!     fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
+//!         match value {
+//!             v if v == Self::Ok                  as u8 => Ok(Self::Ok),
+//!             v if v == Self::OkCancel            as u8 => Ok(Self::OkCancel),
+//!             v if v == Self::AbortRetryIgnore    as u8 => Ok(Self::AbortRetryIgnore),
+//!             v if v == Self::YesNoCancel         as u8 => Ok(Self::YesNoCancel),
+//!             v if v == Self::YesNo               as u8 => Ok(Self::YesNo),
+//!             v if v == Self::RetryCancel         as u8 => Ok(Self::RetryCancel),
+//!             v if v == Self::CancelTryContinue   as u8 => Ok(Self::CancelTryContinue),
+//!             _ => Err(value)
+//!         }
+//!     }
+//! }
+//!
+//! impl core::convert::TryFrom<u8> for DefaultButton {
+//!     type Error = u8;
+//!
+//!     fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
+//!         match value {
+//!             v if v == Self::One     as u8 => Ok(Self::One),
+//!             v if v == Self::Two     as u8 => Ok(Self::Two),
+//!             v if v == Self::Three   as u8 => Ok(Self::Three),
+//!             v if v == Self::Four    as u8 => Ok(Self::Four),
+//!             _ => Err(value)
+//!         }
+//!     }
+//! }
+//!
+//! impl core::convert::TryFrom<u8> for Icon {
+//!     type Error = u8;
+//!
+//!     fn try_from(value: u8) -> core::result::Result<Self, <Icon as core::convert::TryFrom<u8>>::Error> {
+//!         match value {
+//!             v if v == Self::None        as u8 => Ok(Self::None),
+//!             v if v == Self::Error       as u8 => Ok(Self::Error),
+//!             v if v == Self::Question    as u8 => Ok(Self::Question),
+//!             v if v == Self::Warning     as u8 => Ok(Self::Warning),
+//!             v if v == Self::Information as u8 => Ok(Self::Information),
+//!             _ => Err(value)
+//!         }
+//!     }
+//! }
+//!
+//! impl core::convert::TryFrom<u8> for Modality {
+//!     type Error = u8;
+//!
+//!     fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
+//!         match value {
+//!             v if v == Self::Application as u8 => Ok(Self::Application),
+//!             v if v == Self::System      as u8 => Ok(Self::System),
+//!             v if v == Self::Task        as u8 => Ok(Self::Task),
+//!             _ => Err(value)
+//!         }
+//!     }
 //! }
 //! ```
 //!
-//! ## Overlap Example
+//! It can now be constructed and used as follows:
 //!
-//! Some systems reuse/overlap bits for different meanings, for example Microsoft Windows
-//! [Memory Protection Constants](https://docs.microsoft.com/en-us/windows/desktop/Memory/memory-protection-constants)
-//! type has 2x2 flags which overlap: `PAGE_TARGETS_INVALID` with `PAGE_TARGETS_NO_UPDATE` and
-//! `PAGE_ENCLAVE_THREAD_CONTROL` with `PAGE_ENCLAVE_UNVALIDATED`.
-//! By default overlapping fields will result in a `panic`, but it can be disabled by explicitly
-//! indicating that the overlapping is wanted:
+//! ```ignore
+//! let styles = Styles::new()
+//!     .set_button(Button::OkCancel)
+//!     .set_icon(Icon::Information)
+//!     .set(Style::Right, true)
+//!     .set(Style::TopMost, true);
 //!
-//! ```rust
-//! bitfield!(pub MemoryProtection(u32) {
-//!     pub no_access:              0,
-//!
-//!     pub read_only:              1,
-//!     pub read_write:             2,
-//!     pub write_copy:             3,
-//!
-//!     pub execute:                4,
-//!     pub execute_read:           5,
-//!     pub execute_read_write:     6,
-//!     pub execute_write_copy:     7,
-//!
-//!     pub guard:                  8,
-//!     pub no_cache:               9,
-//!    pub write_combine:          10,
-//!
-//!     #[allow_overlap(targets_no_update)]
-//!     pub targets_invalid:        30,
-//!     #[allow_overlap(targets_invalid)]
-//!     pub targets_no_update:      30,
-//!
-//!     #[allow_overlap(enclave_unvalidated)]
-//!     pub enclave_thread_control: 31,
-//!     #[allow_overlap(enclave_thread_control)]
-//!     pub enclave_unvalidated:    31,
-//! });
+//! // `Button == Button` needs `#[derive(PartialEq)]` for `Button`.
+//! if styles.is_set(Style::Help) && styles.button().unwrap() == Button::OkCancel {
+//!     let result = user32::MessageBoxW(/* ... */, styles.set_button(Button::YesNo));
+//! }
 //! ```
-//!
-//! This behaviour also works for enum values with more than one bit in size.
 //!
 //! ## TODO
 //!
-//! - Calculate whether the biggest enum value fits in `bit_amount`.
-//! - Allow `Expr` for flag offsets and ranges.
-//! - Generate function `unused_bits() -> #base_type { /* ... */ }`
-//! - Check for unnecessary `allow_overlap` attributes and attribute members.
+//! - Bounds checking has to wait until [Allow panicking in constants](https://github.com/rust-lang/rust/issues/51999)
+//! is merged.
+//! - Update documentation if [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632) is done.
 
-#![recursion_limit = "256"]
+#![no_std]
 
-extern crate proc_macro;
-extern crate proc_macro2;
-#[macro_use]
-extern crate quote;
-#[macro_use]
-extern crate syn;
+#[cfg(test)]
+extern crate std;
 
-// Macro
+macro_rules! BitField {
+    ($name:ident : $int:ident) => {
+        #[repr(C)]
+        #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+        pub struct $name($int);
 
-use syn::{Attribute, Ident, LitInt, Visibility};
-
-#[proc_macro]
-pub fn bitfield(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    let result = syn::parse(input);
-
-    match result {
-        Ok(field) => parse_bitfield(&field),
-        Err(error) => panic!("Couldn't parse: {:?}!", error)
-    }
-}
-
-// Parser
-
-struct BitField {
-    pub attributes: Vec<Attribute>,
-    pub visibility: Option<Visibility>,
-    pub name: Ident,
-    pub base_type: Ident,
-    pub fields: Vec<Field>
-}
-
-enum Field {
-    Flag(FieldFlag),
-    Type(FieldType)
-}
-
-// struct Foo2<'a> { x: &'a bool }
-struct FieldFlag {
-    pub attributes: Vec<Attribute>,
-    pub visibility: Option<Visibility>,
-    pub name: Ident,
-    pub bit: LitInt
-}
-
-struct FieldType {
-    pub attributes: Vec<Attribute>,
-    pub visibility: Option<Visibility>,
-    pub name: Ident,
-    pub typ: Ident,
-    pub bit: LitInt,
-    pub amount: LitInt
-}
-
-impl syn::synom::Synom for BitField {
-    named!(parse -> Self, do_parse!(
-        attributes: many0!(Attribute::parse_outer) >>
-        visibility: option!(syn!(Visibility)) >>
-        name: syn!(Ident) >>
-        base_type: parens!(syn!(Ident)) >>
-        fields: braces!(
-            // TODO: Use `synom::separated_nonempty_list!(punct!(","), ...)` instead of `syn::many0!(...)`.
-            many0!(alt!(
-                do_parse!(
-                    attributes: many0!(Attribute::parse_outer) >>
-                    visibility: option!(syn!(Visibility)) >>
-                    name: syn!(Ident) >>
-                    punct!(:) >>
-                    bit: syn!(LitInt) >>
-                    punct!(,) >>
-
-                    (Field::Flag(FieldFlag { attributes, visibility, name, bit }))
-                ) |
-                do_parse!(
-                    attributes: many0!(Attribute::parse_outer) >>
-                    visibility: option!(syn!(Visibility)) >>
-                    name: syn!(Ident) >>
-                    punct!(:) >>
-                    typ: syn!(Ident) >>
-                    numbers: parens!(do_parse!(
-                        bit: syn!(LitInt) >>
-                        punct!(,) >>
-                        amount: syn!(LitInt) >>
-
-                        (bit, amount)
-                    )) >>
-                    punct!(,) >>
-
-                    (Field::Type(FieldType { attributes, visibility, name, typ, bit: (numbers.1).0, amount: (numbers.1).1 }))
-                )
-            ))
-        ) >>
-
-        (BitField { attributes, visibility, name, base_type: base_type.1, fields: fields.1 })
-    ));
-}
-
-// Converter
-
-struct FieldBounds {
-    pub name: Ident,
-    pub bit: u64,
-    pub amount: u64,
-    pub overlap: Option<Vec<Ident>>
-}
-
-fn parse_bitfield(input: &BitField) -> proc_macro::TokenStream {
-    if input.fields.len() == 0 {
-        panic!("The bitfield must contain fields!");
-    }
-
-    let attributes = &input.attributes;
-    let base_type = input.base_type;
-    let name = input.name;
-    let visibility = &input.visibility;
-
-    let mut new_initializer = quote::Tokens::new();
-    let mut initializer = quote::Tokens::new();
-    let mut implementation = quote::Tokens::new();
-
-    let mut field_bounds = Vec::new();
-
-    // Check for duplicate names.
-    for i in 0..input.fields.len() - 1 {
-        let mut name_left: Ident;
-        match &input.fields[i] {
-            Field::Flag(flag) => {
-                name_left = flag.name;
+        impl $name {
+            pub const fn new() -> Self {
+                Self(0)
             }
-            Field::Type(typ) => {
-                name_left = typ.name;
+
+            pub const fn bit(&self, position: u8) -> bool {
+                ((self.0 >> position) & 1) != 0
+            }
+
+            pub const fn set_bit(&self, position: u8, value: bool) -> Self {
+                let cleared = self.0 & !(1 << position);
+
+                Self(cleared | ((value as $int) << position))
+            }
+
+            pub const fn field(&self, position: u8, size: u8) -> $int {
+                // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+                // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
+                // assert!(position as usize + size as usize <= (core::mem::size_of::<$int>() * 8));
+
+                (self.0 >> position) & (1 as $int).wrapping_shl(size as u32).wrapping_sub(1)
+            }
+
+            pub const fn set_field(&self, position: u8, size: u8, value: $int) -> Self {
+                // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+                // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
+                // assert!(position as usize + size as usize <= (core::mem::size_of::<$int>() * 8));
+                // assert!((1 as $int).wrapping_shl(size as u32).wrapping_sub(1) >= value);
+
+                Self((self.0 & !((1 as $int).wrapping_shl(size as u32).wrapping_sub(1) << position)) | (value << position))
             }
         }
 
-        for j in i + 1..input.fields.len() {
-            let mut name_right: Ident;
-            match &input.fields[j] {
-                Field::Flag(flag) => {
-                    name_right = flag.name;
-                }
-                Field::Type(typ) => {
-                    name_right = typ.name;
-                }
+        #[cfg(test)]
+        impl core::cmp::PartialEq<$int> for $name {
+            fn eq(&self, other: &$int) -> bool {
+                self.0 == *other
             }
-
-            if name_left == name_right {
-                panic!("Duplicate field name: `{}`!", name_left);
-            }
-        }
-    }
-
-    // Process all fields.
-    for field in input.fields.iter() {
-        match field {
-            Field::Flag(flag) => {
-                let setter = Ident::from(format!("set_{}", flag.name.as_ref()));
-
-                let mut attributes = flag.attributes.to_vec();
-                let bit = &flag.bit;
-                let name = flag.name;
-                let visibility = &flag.visibility;
-
-                let base_type_string: String = base_type.as_ref().chars().skip(1).collect();
-                let available_bits = base_type_string.parse::<u64>();
-                match available_bits {
-                    Ok(value) => {
-                        if bit.value() > value {
-                            panic!("`{}`: {} is outside of the valid range of {} bits!", name, bit.value(), value);
-                        }
-                    },
-                    _ => panic!("`{}` is an unsupported primitive type!", base_type)
-                }
-
-                let overlap = extract_overlap(&mut attributes);
-                let attributes = &attributes;
-
-                field_bounds.push(FieldBounds { name, bit: bit.value(), amount: 1, overlap });
-
-                new_initializer.append_all(quote! {
-                    s.#setter(init.#name);
-                });
-
-                initializer.append_all(quote! {
-                    #(#attributes)*
-                    #name: bool,
-                });
-
-                implementation.append_all(quote! {
-                    #(#attributes)*
-                    #[inline]
-                    #visibility fn #name(&self) -> bool {
-                        let max_bit_value: #base_type = 1;
-                        let positioned_bits = self.0 >> #bit;
-                        positioned_bits & max_bit_value == 1
-                    }
-
-                    #(#attributes)*
-                    #[inline]
-                    #visibility fn #setter(&mut self, value: bool) {
-                        let positioned_bits: #base_type = 1 << #bit;
-                        let positioned_flags = (value as #base_type) << #bit;
-                        let cleaned_flags = self.0 & !positioned_bits;
-                        self.0 = cleaned_flags | positioned_flags;
-                    }
-                });
-            },
-            Field::Type(typ) => {
-                let setter = Ident::from(format!("set_{}", typ.name.as_ref()));
-                let from = Ident::from(format!("from_{}", base_type.as_ref()));
-
-                let amount = &typ.amount;
-                let mut attributes = typ.attributes.to_vec();
-                let base_type = input.base_type;
-                let bit = &typ.bit;
-                let name = typ.name;
-                let visibility = &typ.visibility;
-                let typ = typ.typ;
-
-                let base_type_string: String = base_type.as_ref().chars().skip(1).collect();
-                let available_bits = base_type_string.parse::<u64>();
-                match available_bits {
-                    Ok(value) => {
-                        if bit.value() + amount.value() > value {
-                            panic!("`{}`: {} + {} = {} is outside of the valid range of {} bits!", name, bit.value(), amount.value(), bit.value() + amount.value(), value);
-                        }
-                    },
-                    _ => panic!("`{}` is an unsupported primitive type!", base_type)
-                }
-
-                let overlap = extract_overlap(&mut attributes);
-                let attributes = &attributes;
-
-                field_bounds.push(FieldBounds { name, bit: bit.value(), amount: amount.value(), overlap });
-
-                new_initializer.append_all(quote! {
-                    s.#setter(init.#name);
-                });
-
-                initializer.append_all(quote! {
-                    #(#attributes)*
-                    #name: #typ,
-                });
-
-                implementation.append_all(quote! {
-                    #(#attributes)*
-                    #[inline]
-                    #visibility fn #name(&self) -> result::Result<#typ, #base_type> {
-                        const MAX_BIT_VALUE: #base_type = (1 << #amount) - 1;
-                        let positioned_bits = self.0 >> #bit;
-                        let value = positioned_bits & MAX_BIT_VALUE;
-                        let enum_value = #typ::#from(value as #base_type);
-                        if enum_value.is_some() {
-                            Ok(enum_value.unwrap())
-                        } else { Err(value) }
-                    }
-
-                    #(#attributes)*
-                    #[inline]
-                    #visibility fn #setter(&mut self, value: #typ) {
-                        const MAX_BIT_VALUE: #base_type = (1 << #amount) - 1;
-                        const POSITIONED_BITS: #base_type = MAX_BIT_VALUE << #bit;
-                        let positioned_flags = (value as #base_type) << #bit;
-                        let cleaned_flags = self.0 & !POSITIONED_BITS;
-                        self.0 = cleaned_flags | positioned_flags;
-                    }
-                });
-            }
-        }
-    }
-
-    // Check overlapping fields.
-    let bounds = field_bounds.len();
-    match bounds {
-        0 => panic!("The bitfield must contain fields!"),
-        1 => (),
-        _ => {
-            // Sort fields by 1. bit position and 2. bit amount.
-            field_bounds.sort_by(|left, right| {
-                let ordering = left.bit.cmp(&right.bit);
-                match ordering {
-                    std::cmp::Ordering::Less | std::cmp::Ordering::Greater => ordering,
-                    std::cmp::Ordering::Equal => left.amount.cmp(&right.amount)
-                }
-            });
-
-            // Check overlap attributes.
-            for i in 0..bounds - 1 {
-                let bounds_left: &FieldBounds = field_bounds.get(i).unwrap();
-
-                for j in i + 1..bounds {
-                    let bounds_right: &FieldBounds = field_bounds.get(j).unwrap();
-
-                    match check_overlap(&bounds_left, &bounds_right) {
-                        OverlapStatus::NoOverlap => break,
-                        OverlapStatus::AllowedOverlap => (),
-                        OverlapStatus::Overlap => panic!(format!("`{}` overlaps with `{}`! Did you forget an `allow_overlap` attribute?", bounds_left.name, bounds_right.name))
-                    }
-                }
-            }
-        }
-    }
-
-    // Create struct, initializer and struct implementation.
-    let name_initializer = Ident::from(input.name.to_string() + "Init");
-
-    let content: quote::Tokens = quote! {
-        #(#attributes)*
-        #visibility struct #name(#base_type);
-
-        #[derive(Default)]
-        #visibility struct #name_initializer {
-            #initializer
-        }
-
-        impl #name {
-            #[inline]
-            pub fn new(init: #name_initializer) -> Self {
-                let mut s = #name(0);
-
-                #new_initializer
-
-                s
-            }
-
-            #implementation
         }
     };
-
-    content.into()
 }
 
-enum OverlapStatus {
-    NoOverlap,
-    AllowedOverlap,
-    Overlap
-}
+BitField!(BitField8: u8);
+BitField!(BitField16: u16);
+BitField!(BitField32: u32);
+BitField!(BitField64: u64);
+BitField!(BitField128: u128);
+BitField!(BitFieldSize: usize);
 
-/**
- * None        => No Overlap,
- * Some(false) => Overlap, with `allow_overlap` attribute.
- * Some(true)  => Overlap, without `allow_overlap` attribute!
- */
-fn check_overlap(bounds_left: &FieldBounds, bounds_right: &FieldBounds) -> OverlapStatus {
-    let ordering = bounds_left.bit.cmp(&bounds_right.bit);
-    match ordering {
-        std::cmp::Ordering::Less => {
-            if bounds_left.bit + bounds_left.amount <= bounds_right.bit { return OverlapStatus::NoOverlap; }
-            check_overlap_names(bounds_left, bounds_right)
-        }
-        std::cmp::Ordering::Equal => check_overlap_names(bounds_left, bounds_right),
-        std::cmp::Ordering::Greater => panic!(format!("Wrong order of `{}` and `{}`! THIS SHOULD NEVER HAPPEN!", bounds_left.name, bounds_right.name))
-    }
-}
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-fn check_overlap_names(bounds_left: &FieldBounds, bounds_right: &FieldBounds) -> OverlapStatus {
-    match bounds_left.overlap {
-        None => return OverlapStatus::Overlap,
-        Some(ref overlap) => {
-            let mut has_attribute = false;
-            for attribute_name in overlap.iter() {
-                if bounds_right.name == attribute_name {
-                    has_attribute = true;
-                    break;
-                }
-            }
-            if !has_attribute { return OverlapStatus::Overlap; }
-        }
-    }
+    #[test]
+    fn all_functions() {
+        let mut bf = BitField8::new();
+        assert_eq!(bf, 0b0000_0000);
+        assert!(!bf.bit(3));
+        assert_eq!(bf.field(3, 1), 0);
+        assert_eq!(bf.field(2, 2), 0);
+        assert_eq!(bf.field(0, 0), 0);
 
-    match bounds_right.overlap {
-        None => return OverlapStatus::Overlap,
-        Some(ref overlap) => {
-            let mut has_attribute = false;
-            for attribute_name in overlap.iter() {
-                if bounds_left.name == attribute_name {
-                    has_attribute = true;
-                    break;
-                }
-            }
-            if !has_attribute { return OverlapStatus::Overlap; }
-        }
+        bf = bf.set_bit(3, true);
+        assert_eq!(bf, 0b0000_1000);
+        assert!(!bf.bit(2));
+        assert!(bf.bit(3));
+        assert_eq!(bf.field(3, 1), 1);
+        assert_eq!(bf.field(2, 2), 1 << 1);
+        
+        bf = bf.set_bit(2, true);
+        assert_eq!(bf, 0b0000_1100);
+        assert!(bf.bit(2));
+        assert!(bf.bit(3));
+        assert_eq!(bf.field(3, 1), 1);
+        assert_eq!(bf.field(2, 2), (1 << 1) | 1);
+        
+        bf = bf.set_field(3, 4, 0b1111);
+        assert_eq!(bf, 0b0111_1100);
     }
 
-    OverlapStatus::AllowedOverlap
-}
-
-fn extract_overlap(attributes: &mut Vec<Attribute>) -> Option<Vec<Ident>> {
-    let mut result = Vec::new();
-
-    let mut i: usize = 0;
-    while i < attributes.len() {
-        if attributes[i].path.segments.len() != 1 || &attributes[i].path.segments[0].ident != "allow_overlap" {
-            i += 1;
-            continue;
-        }
-
-        match attributes[i].interpret_meta() {
-            None => panic!("Couldn't parse `allow_overlap` attribute!"),
-            Some(meta) => {
-                match meta {
-                    syn::Meta::List(meta_list) => {
-                        for meta_item in meta_list.nested {
-                            match meta_item {
-                                syn::NestedMeta::Meta(meta) => {
-                                    match meta {
-                                        syn::Meta::Word(ident) => {
-                                            result.push(ident);
-                                        },
-                                        _ => panic!("Only identifiers are allowed as overlapping names!")
-                                    }
-                                },
-                                _ => panic!("Only identifiers are allowed as overlapping names!")
-                            }
-                        }
-                    },
-                    _ => panic!("Must specify allowed overlapping names: `#[allow_overlap(name1, name2, ...)]`!")
-                }
-            }
-        }
-        attributes.remove(i);
+    #[test]
+    #[should_panic(expected = "attempt to shift right with overflow")]
+    fn bounds_bit_position() {
+        BitField8::new().bit(8);
     }
 
-    if result.len() == 0 { return None; }
-    Some(result)
+    #[test]
+    #[should_panic(expected = "attempt to shift right with overflow")]
+    fn bounds_field_position() {
+        BitField8::new().field(8, 0);
+    }
+
+    /*
+    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+    #[test]
+    #[should_panic(expected = "TODO")]
+    fn bounds_field_size() {
+        BitField8::new().field(0, 9);
+    }
+
+    #[test]
+    #[should_panic(expected = "TODO")]
+    fn bounds_field_combination() {
+        BitField8::new().field(7, 2);
+    }
+    */
+
+    #[test]
+    #[should_panic(expected = "attempt to shift left with overflow")]
+    fn bounds_set_bit_position() {
+        let _ = BitField8::new().set_bit(8, true);
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to shift left with overflow")]
+    fn bounds_set_field_position() {
+        let _ = BitField8::new().set_field(8, 0, 0);
+    }
+
+    /*
+    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+    #[test]
+    #[should_panic(expected = "TODO")]
+    fn bounds_set_field_size() {
+        let _ = BitField8::new().set_field(0, 9, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "TODO")]
+    fn bounds_set_field_combination() {
+        let _ = BitField8::new().set_field(7, 2, 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "TODO")]
+    fn bounds_set_field_value() {
+        let _ = BitField8::new().set_field(0, 1, 2);
+    }
+    */
 }

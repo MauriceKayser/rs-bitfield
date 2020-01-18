@@ -1,124 +1,96 @@
-# Bitfields for Rust
+# Bit fields for Rust
 
-A Rust macro to generate structures which behave like bitfields.
+Provides structures which simplify bit level access to primitive types in Rust.
 
 ## Dependencies
 
-- Optionally a [from_primitive](https://github.com/mauricekayser/rs-from-primitive) like crate for enum conversions,
-which generates from_*primitive_type* like functions.
+None, the types work in a `#[no_std]` environment.
+
+## Description
+
+A bit field can store simple boolean flags, as well as values of multiple bits in size.
+A `BitField` structure, for example `BitField16`, has the following 5 `const` functions:
+
+- `const fn new() -> Self`
+- `const fn bit(&self, position: u8) -> bool`
+- `const fn set_bit(&self, position: u8, value: bool) -> Self`
+- `const fn field(&self, position: u8, size: u8) -> u16`
+- `const fn set_field(&self, position: u8, size: u8, value: u16) -> Self`
+
+The setters return a modified copy of their own value, so the builder pattern can be used
+to construct such a bit field.
 
 ## Simple example
 
-Imagine the following type which can store up to 8 flags in a `u8` value:
+Imagine the following type which can store up to 16 flags in a `u16` value:
 
 ```rust
-pub const IS_SYSTEM:    u8 = 1 << 0; // 1
-pub const IS_DLL:       u8 = 1 << 1; // 2
-pub const IS_X64:       u8 = 1 << 2; // 4
-// ... up to 5 more flags ...
+pub const IS_SYSTEM:    u16 = 1 << 0; // 1
+pub const IS_LIBRARY:   u16 = 1 << 1; // 2
+// Undefined:                 1 << 2; // 4
+pub const IS_X64:       u16 = 1 << 3; // 8
+// ... up to 12 more flags ...
 
-fn do_stuff(information_flags: u8) { /* ... */ }
+extern "C" fn bla() -> u16;
+extern "C" fn foo(executable_flags: u16);
 
-// ...
-do_stuff(IS_SYSTEM | IS_X64);
-// ...
+// Usage
+
+let mut executable_flags = bla();
+
+// Add the system and x64 flags.
+executable_flags |= IS_SYSTEM | IS_X64;
+
+// Execute `foo` if the library flag is set.
+if (executable_flags & IS_LIBRARY) != 0 {
+    foo(executable_flags);
+}
 ```
 
 With the help of this crate this can be expressed as follows:
 
 ```rust
-extern crate bitfield;
-use bitfield::bitfield;
+#[repr(C)]
+pub struct ExecutableFlags(bitfield::BitField16);
 
-/*
-bitfield!(struct_visibility StructName(struct_base_type) {
-    (flag_visibility flag_name: bit_position,)+
-});
-*/
-bitfield!(pub Information(u8) {
-    pub system: 0,
-    pub dll:    1,
-    pub x64:    2,
-});
-```
-
-This results in the following generated code:
-
-```rust
-pub struct Information(u8);
-
-#[derive(Default)]
-pub struct InformationInit {
-    system: bool,
-    dll:    bool,
-    x64:    bool,
+#[repr(u8)]
+pub enum ExecutableFlag {
+    System,
+    Library,
+    X64 = 3
 }
 
-impl Information {
-    #[inline]
-    pub fn system(&self) -> bool {
-        let max_bit_value = 1;
-        let positioned_bits = self.0 >> 0;
-        positioned_bits & max_bit_value == 1
+impl ExecutableFlags {
+    pub const fn new() -> Self {
+        Self(bitfield::BitField16::new())
     }
 
-    #[inline]
-    pub fn set_system(&mut self, value: bool) {
-        let positioned_bits = 1 << 0;
-        let positioned_flags = (value as u8) << 0;
-        let cleaned_flags = self.0 & !positioned_bits;
-        self.0 = cleaned_flags | positioned_flags;
+    pub const fn is_set(&self, flag: ExecutableFlag) -> bool {
+        self.0.bit(flag as u8)
     }
 
-    #[inline]
-    pub fn dll(&self) -> bool {
-        let max_bit_value = 1;
-        let positioned_bits = self.0 >> 1;
-        positioned_bits & max_bit_value == 1
-    }
-
-    #[inline]
-    pub fn set_dll(&mut self, value: bool) {
-        let positioned_bits = 1 << 1;
-        let positioned_flags = (value as u8) << 1;
-        let cleaned_flags = self.0 & !positioned_bits;
-        self.0 = cleaned_flags | positioned_flags;
-    }
-
-    // ... same for `x64`.
-
-    #[inline]
-    pub fn new(init: InformationInit) -> Self {
-        let mut s = Information(0);
-
-        s.set_system(init.system);
-        s.set_dll(init.dll);
-        s.set_x64(init.x64);
-
-        s
+    pub const fn set(&self, flag: ExecutableFlag, value: bool) -> Self {
+        Self(self.0.set_bit(flag as u8, value))
     }
 }
 
-// It can now be constructed (f. e. with default values) and used like so:
+extern "C" fn bla() -> ExecutableFlags;
+extern "C" fn foo(executable_flags: ExecutableFlags);
 
-let mut info = Information::new(InformationInit {
-    dll: true,
-    ..Default::default()
-});
+// Usage
 
-// ... code ...
+let executable_flags = bla().set(ExecutableFlag::System).set(ExecutableFlag::X64);
 
-if !info.x64() {
-    // ... code ...
-    info.set_system(true);
+if executable_flags.is_set(ExecutableFlag::Library) {
+    foo(executable_flags);
 }
 ```
 
 ## Detailed Example
 
 This example is based on the 4. parameter `UINT uType` of Microsoft Windows
-[user32.MessageBox function](https://msdn.microsoft.com/en-us/library/windows/desktop/ms645505.aspx) and not only stores
-`bool`ean flags, but also `enum` values.
+[user32.MessageBox function](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messagebox)
+which not only stores boolean flags, but also fields with more than one bit in size.
 
 A Microsoft Visual C++ `UINT` is a `u32` in Rust. So all constants for the parameter `uType` can be written as follows:
 
@@ -161,29 +133,25 @@ const MB_SERVICE_NOTIFICATION:       u32 = 1 << 21;
 ```
 
 One problem is that `u32` is not type safe like an `enum` value, another is that the usage of an `u32` is error prone,
-because several flags of the same "type group" like a button can be `|`-ed together
+because several "flags" of the same "type group" (called a "field"), like a button, can be `|`-ed together
 (f. e. `MB_BUTTON_ABORT_RETRY_IGNORE | MB_BUTTON_YES_NO`) which might result in some unexpected behaviour.
-Checking if certain flags are set is also unnecessarily complicated.
+Checking if certain fields, like a button, have a specific value is also unnecessarily complicated (bit fiddling
+operators like `>>` and `&` etc. are necessary).
 
-The previously mentioned "type groups" are saved in the `u32` value as follows:
+The previously mentioned fields are stored in the `u32` value as follows:
 
-| Type            | Min. value (w/o 0) | Max. value | Storage bits                                            | Max. storable value             |
-| --------------- | ------------------ | ---------- | ------------------------------------------------------- | ------------------------------- |
-| `Button`        | 0x1                | 0x6        | 0b0000_0000_0000_0000_0000_0000_0000_0**XXX** (0 - 2)   | `((1 << 3) - 1) <<  0` = 0x7    |
-| `Icon`          | 0x10               | 0x40       | 0b0000_0000_0000_0000_0000_0000_0**XXX**_0000 (4 - 6)   | `((1 << 3) - 1) <<  4` = 0x70   |
-| `DefaultButton` | 0x100              | 0x300      | 0b0000_0000_0000_0000_0000_00**XX**_0000_0000 (8 - 9)   | `((1 << 2) - 1) <<  8` = 0x300  |
-| `Modality`      | 0x1000             | 0x2000     | 0b0000_0000_0000_0000_00**XX**_0000_0000_0000 (12 - 13) | `((1 << 2) - 1) << 12` = 0x3000 |
+| Type            | Min. def. value (`> 0`) | Max. def. value | Storage bits                                            | Max. storable value             |
+| --------------- | ----------------------- | --------------- | ------------------------------------------------------- | ------------------------------- |
+| `Button`        | 0x1                     | 0x6             | 0b0000_0000_0000_0000_0000_0000_0000_**XXXX** (0 - 4)   | `((1 << 4) - 1) <<  0` = 0x7    |
+| `Icon`          | 0x10                    | 0x40            | 0b0000_0000_0000_0000_0000_0000_**XXXX**_0000 (4 - 8)   | `((1 << 4) - 1) <<  4` = 0x70   |
+| `DefaultButton` | 0x100                   | 0x300           | 0b0000_0000_0000_0000_0000_**XXXX**_0000_0000 (8 - 12)  | `((1 << 4) - 1) <<  8` = 0x700  |
+| `Modality`      | 0x1000                  | 0x2000          | 0b0000_0000_0000_0000_00**XX**_0000_0000_0000 (12 - 13) | `((1 << 2) - 1) << 12` = 0x3000 |
 
-All of the "type groups" can be expressed by rebasing them (removing the trailing zeros):
+All of the fields can be expressed by shifting them to the right (removing the trailing zeros):
 
 ```rust
-#[macro_use]
-extern crate from_primitive;
-
-#[repr(u32)]
-#[derive(Debug, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum Button {
-    #[default]
     Ok,
     OkCancel,
     AbortRetryIgnore,
@@ -191,218 +159,209 @@ pub enum Button {
     YesNo,
     RetryCancel,
     CancelTryContinue
+    // Value `7` is unused.
 }
 
-#[repr(u32)]
-#[derive(Debug, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum DefaultButton {
-    #[default]
     One,
     Two,
     Three,
     Four
+    // Values `4` - `7` are unused.
 }
 
-#[repr(u32)]
-#[derive(Debug, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum Icon {
-    #[default]
     None,
-    Stop,
+    Error,
     Question,
-    Exclamation,
+    Warning,
     Information
+    // Values `5` - `7` are unused.
 }
 
-#[repr(u32)]
-#[derive(Debug, FromPrimitive, PartialEq)]
+#[repr(u8)]
 pub enum Modality {
-    #[default]
     Application,
     System,
     Task
+    // Value `3` is unused.
 }
 ```
 
-Now the `bitfield` macro can be used as follows:
+The write- or construct-only variant of the `Styles` structure can be built with the
+`BitField32` type like so:
 
 ```rust
-/*
-bitfield!(struct_visibility StructName(struct_base_type) {
-    (
-        (flag_visibility flag_name: bit_position,) |
-        (flag_visibility flag_name: flag_base_type(bit_position, bit_amount),)
-    )+
-});
-*/
-bitfield!(pub Style(u32) {
-    pub button:                 Button(0, 3),
-    pub icon:                   Icon(4, 3),
-    pub default_button:         DefaultButton(8, 2),
-    pub modality:               Modality(12, 2),
-    pub help:                   14,
-    pub foreground:             16,
-    pub default_desktop_only:   17,
-    pub top_most:               18,
-    pub right:                  19,
-    pub right_to_left_reading:  20,
-    pub service_notification:   21,
-});
-```
+#[repr(C)]
+pub struct Styles(bitfield::BitField32);
 
-This results in the following generated code:
-
-```rust
-pub struct Style(u32);
-
-#[derive(Default)]
-pub struct StyleInit {
-    button:     Button,
-    icon:       Icon,
-    // ...
-    help:       bool,
-    foreground: bool,
-    // ...
+#[repr(u8)]
+pub enum Style {
+    Help = 14,
+    SetForeground = 16,
+    DefaultDesktopOnly,
+    TopMost,
+    Right,
+    RightToLeftReading,
+    ServiceNotification
 }
 
-impl Style {
-    #[inline]
-    pub fn button(&self) -> result::Result<Button, u32> {
-        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-        let positioned_bits = self.0 >> 0;
-        let value = positioned_bits & MAX_BIT_VALUE;
-        let enum_value = Button::from_u32(value as u32);
-        if enum_value.is_some() {
-            Ok(enum_value.unwrap())
-        } else { Err(value) }
+impl Styles {
+    pub const fn new() -> Self {
+        Self(bitfield::BitField32::new())
     }
 
-    #[inline]
-    pub fn set_button(&mut self, value: Button) {
-        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-        const POSITIONED_BITS = MAX_BIT_VALUE << 0;
-        let positioned_flags = (value as u32) << 0;
-        let cleaned_flags = self.0 & !POSITIONED_BITS;
-        self.0 = cleaned_flags | positioned_flags;
+    pub const fn set(&self, style: Style, value: bool) -> Self {
+        Self(self.0.set_bit(style as u8, value))
     }
 
-    #[inline]
-    pub fn icon(&self) -> result::Result<Icon, u32> {
-        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-        let positioned_bits = self.0 >> 4;
-        let value = positioned_bits & MAX_BIT_VALUE;
-        let enum_value = Icon::from_u32(value as u32);
-        if enum_value.is_some() {
-            Ok(enum_value.unwrap())
-        } else { Err(value) }
+    // Field setters
+
+    pub const fn set_button(&self, button: Button) -> Self {
+        Self(self.0.set_field(0, 4, button as u32))
     }
 
-    #[inline]
-    pub fn set_icon(&mut self, value: Icon) {
-        const MAX_BIT_VALUE: u32 = (1 << 3) - 1;
-        const POSITIONED_BITS = MAX_BIT_VALUE << 4;
-        let positioned_flags = (value as u32) << 4;
-        let cleaned_flags = self.0 & !POSITIONED_BITS;
-        self.0 = cleaned_flags | positioned_flags;
+    pub const fn set_icon(&self, icon: Icon) -> Self {
+        Self(self.0.set_field(4, 4, icon as u32))
     }
 
-    // ...
-
-    #[inline]
-    pub fn help(&self) -> bool {
-        let max_bit_value: u32 = 1;
-        let positioned_bits = self.0 >> 14;
-        positioned_bits & max_bit_value == 1
+    pub const fn set_default_button(&self, default_button: DefaultButton) -> Self {
+        Self(self.0.set_field(8, 4, default_button as u32))
     }
 
-    #[inline]
-    pub fn set_help(&mut self, value: bool) {
-        let positioned_bits: u32 = 1 << 14;
-        let positioned_flags = (value as u32) << 14;
-        let cleaned_flags = self.0 & !positioned_bits;
-        self.0 = cleaned_flags | positioned_flags;
-    }
-
-    // ...
-
-    #[inline]
-    pub fn new(init: StyleInit) -> Self {
-        let mut s = Style(0);
-
-        s.set_button(init.button);
-        s.set_icon(init.icon);
-        // ...
-
-        s.set_help(init.help);
-        s.set_foreground(init.foreground);
-        // ...
-
-        s
+    pub const fn set_modality(&self, modality: Modality) -> Self {
+        Self(self.0.set_field(12, 2, modality as u32))
     }
 }
 ```
 
-It can now be constructed (f. e. with default values) and used like so:
+It can now be constructed and used as follows:
 
 ```rust
-let mut style = Style::new(StyleInit {
-    button: Button::OkCancel,
-    icon: Icon::Information,
-    right: true,
-    ..Default::default()
-});
+let styles = Styles::new()
+    .set_button(Button::OkCancel)
+    .set_icon(Icon::Information)
+    .set(Style::Right, true)
+    .set(Style::TopMost, true);
 
-// ... code ...
+let result = user32::MessageBoxW(/* ... */, styles);
+```
 
-if style.right() && style.button() == Button::Ok {
-    // ... code ...
-    style.set_button(Button::OkCancel);
+For the read-write variant of the `Styles` structure the following code has to be added:
+
+```rust
+use core::convert::TryFrom;
+
+impl Styles {
+    pub const fn is_set(&self, style: Style) -> bool {
+        self.0.bit(style as u8)
+    }
+
+    // Field getters
+    //
+    // They must return a `core::result::Result`, because the bits can represent values which
+    // are not among the defined enumeration variants.
+    //
+    // They can not be `const` until [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632) is done.
+
+    pub fn button(&self) -> Result<Button, u8> {
+        Button::try_from(self.0.field(0, 4) as u8)
+    }
+
+    pub fn icon(&self) -> Result<Icon, u8> {
+        Icon::try_from(self.0.field(4, 4) as u8)
+    }
+
+    pub fn default_button(&self) -> Result<DefaultButton, u8> {
+        DefaultButton::try_from(self.0.field(8, 4) as u8)
+    }
+
+    pub fn modality(&self) -> Result<Modality, u8> {
+        Modality::try_from(self.0.field(12, 2) as u8)
+    }
+}
+
+// Convert from `u8` to our enumerations, necessary for the `Field getters` part.
+
+impl core::convert::TryFrom<u8> for Button {
+    type Error = u8;
+
+    fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
+        match value {
+            v if v == Self::Ok                  as u8 => Ok(Self::Ok),
+            v if v == Self::OkCancel            as u8 => Ok(Self::OkCancel),
+            v if v == Self::AbortRetryIgnore    as u8 => Ok(Self::AbortRetryIgnore),
+            v if v == Self::YesNoCancel         as u8 => Ok(Self::YesNoCancel),
+            v if v == Self::YesNo               as u8 => Ok(Self::YesNo),
+            v if v == Self::RetryCancel         as u8 => Ok(Self::RetryCancel),
+            v if v == Self::CancelTryContinue   as u8 => Ok(Self::CancelTryContinue),
+            _ => Err(value)
+        }
+    }
+}
+
+impl core::convert::TryFrom<u8> for DefaultButton {
+    type Error = u8;
+
+    fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
+        match value {
+            v if v == Self::One     as u8 => Ok(Self::One),
+            v if v == Self::Two     as u8 => Ok(Self::Two),
+            v if v == Self::Three   as u8 => Ok(Self::Three),
+            v if v == Self::Four    as u8 => Ok(Self::Four),
+            _ => Err(value)
+        }
+    }
+}
+
+impl core::convert::TryFrom<u8> for Icon {
+    type Error = u8;
+
+    fn try_from(value: u8) -> core::result::Result<Self, <Icon as core::convert::TryFrom<u8>>::Error> {
+        match value {
+            v if v == Self::None        as u8 => Ok(Self::None),
+            v if v == Self::Error       as u8 => Ok(Self::Error),
+            v if v == Self::Question    as u8 => Ok(Self::Question),
+            v if v == Self::Warning     as u8 => Ok(Self::Warning),
+            v if v == Self::Information as u8 => Ok(Self::Information),
+            _ => Err(value)
+        }
+    }
+}
+
+impl core::convert::TryFrom<u8> for Modality {
+    type Error = u8;
+
+    fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
+        match value {
+            v if v == Self::Application as u8 => Ok(Self::Application),
+            v if v == Self::System      as u8 => Ok(Self::System),
+            v if v == Self::Task        as u8 => Ok(Self::Task),
+            _ => Err(value)
+        }
+    }
 }
 ```
 
-## Overlap Example
-
-Some systems reuse/overlap bits for different meanings, for example Microsoft Windows
-[Memory Protection Constants](https://docs.microsoft.com/en-us/windows/desktop/Memory/memory-protection-constants)
-type has 2x2 flags which overlap: `PAGE_TARGETS_INVALID` with `PAGE_TARGETS_NO_UPDATE` and
-`PAGE_ENCLAVE_THREAD_CONTROL` with `PAGE_ENCLAVE_UNVALIDATED`.
-By default overlapping fields will result in a `panic`, but it can be disabled by explicitly
-indicating that the overlapping is wanted:
+It can now be constructed and used as follows:
 
 ```rust
-bitfield!(pub MemoryProtection(u32) {
-    pub no_access:              0,
+let styles = Styles::new()
+    .set_button(Button::OkCancel)
+    .set_icon(Icon::Information)
+    .set(Style::Right, true)
+    .set(Style::TopMost, true);
 
-    pub read_only:              1,
-    pub read_write:             2,
-    pub write_copy:             3,
-
-    pub execute:                4,
-    pub execute_read:           5,
-    pub execute_read_write:     6,
-    pub execute_write_copy:     7,
-
-    pub guard:                  8,
-    pub no_cache:               9,
-    pub write_combine:          10,
-
-    #[allow_overlap(targets_no_update)]
-    pub targets_invalid:        30,
-    #[allow_overlap(targets_invalid)]
-    pub targets_no_update:      30,
-
-    #[allow_overlap(enclave_unvalidated)]
-    pub enclave_thread_control: 31,
-    #[allow_overlap(enclave_thread_control)]
-    pub enclave_unvalidated:    31,
-});
+// `Button == Button` needs `#[derive(PartialEq)]` for `Button`.
+if styles.is_set(Style::Help) && styles.button().unwrap() == Button::OkCancel {
+    let result = user32::MessageBoxW(/* ... */, styles.set_button(Button::YesNo));
+}
 ```
-
-This behaviour also works for enum values with more than one bit in size.
 
 ## TODO
 
-- Calculate whether the biggest enum value fits in `bit_amount`.
-- Allow `Expr` for flag offsets and ranges.
-- Generate function `unused_bits() -> #base_type { /* ... */ }`
-- Check for unnecessary `allow_overlap` attributes and attribute members.
+- Bounds checking has to wait until [Allow panicking in constants](https://github.com/rust-lang/rust/issues/51999)
+is merged.
+- Update documentation if [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632) is done.
