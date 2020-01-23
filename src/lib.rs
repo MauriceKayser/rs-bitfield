@@ -284,6 +284,8 @@
 //! }
 //!
 //! // Convert from `u8` to our enumerations, necessary for the `Field getters` part.
+//! // An alternative to the manual implementation is using a crate like:
+//! // [from-primitive](https://github.com/MauriceKayser/rs-from-primitive)
 //!
 //! impl core::convert::TryFrom<u8> for Button {
 //!     type Error = u8;
