@@ -380,20 +380,24 @@ macro_rules! BitField {
         pub struct $name($int);
 
         impl $name {
+            #[inline(always)]
             pub const fn new() -> Self {
                 Self(0)
             }
 
+            #[inline(always)]
             pub const fn bit(&self, position: u8) -> bool {
                 ((self.0 >> position) & 1) != 0
             }
 
+            #[inline(always)]
             pub const fn set_bit(&self, position: u8, value: bool) -> Self {
                 let cleared = self.0 & !(1 << position);
 
                 Self(cleared | ((value as $int) << position))
             }
 
+            #[inline(always)]
             pub const fn field(&self, position: u8, size: u8) -> $int {
                 // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
                 // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
@@ -402,6 +406,7 @@ macro_rules! BitField {
                 (self.0 >> position) & (1 as $int).wrapping_shl(size as u32).wrapping_sub(1)
             }
 
+            #[inline(always)]
             pub const fn set_field(&self, position: u8, size: u8, value: $int) -> Self {
                 // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
                 // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
