@@ -9,9 +9,10 @@
 //! ## Description
 //!
 //! A bit field can store simple boolean flags, as well as values of multiple bits in size.
-//! A `BitField` structure, for example `BitField16`, has the following 5 `const` functions:
+//! A `BitField` structure, for example `BitField16`, has the following 6 `const` functions:
 //!
 //! - `const fn new() -> Self`
+//! - `const fn value(&self) -> u16`
 //! - `const fn bit(&self, position: u8) -> bool`
 //! - `const fn set_bit(&self, position: u8, value: bool) -> Self`
 //! - `const fn field(&self, position: u8, size: u8) -> u16`
@@ -386,6 +387,11 @@ macro_rules! BitField {
             }
 
             #[inline(always)]
+            pub const fn value(&self) -> $int {
+                self.0
+            }
+
+            #[inline(always)]
             pub const fn bit(&self, position: u8) -> bool {
                 ((self.0 >> position) & 1) != 0
             }
@@ -400,20 +406,44 @@ macro_rules! BitField {
             #[inline(always)]
             pub const fn field(&self, position: u8, size: u8) -> $int {
                 // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+                // assert!(size > 0);
                 // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
                 // assert!(position as usize + size as usize <= (core::mem::size_of::<$int>() * 8));
 
-                (self.0 >> position) & (1 as $int).wrapping_shl(size as u32).wrapping_sub(1)
+                let shifted = self.0 >> position;
+
+                let rest = size as $int % (core::mem::size_of::<$int>() * 8) as $int;
+                let bit = (rest > 0) as $int;
+
+                let limit = bit.wrapping_shl(rest as u32);
+                let mask = limit.wrapping_sub((size > 0) as $int);
+                let result = shifted & mask;
+
+                result
             }
 
             #[inline(always)]
             pub const fn set_field(&self, position: u8, size: u8, value: $int) -> Self {
                 // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+                // assert!(size > 0);
                 // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
                 // assert!(position as usize + size as usize <= (core::mem::size_of::<$int>() * 8));
                 // assert!((1 as $int).wrapping_shl(size as u32).wrapping_sub(1) >= value);
 
-                Self((self.0 & !((1 as $int).wrapping_shl(size as u32).wrapping_sub(1) << position)) | (value << position))
+                let rest = size as $int % (core::mem::size_of::<$int>() * 8) as $int;
+                let bit = (rest > 0) as $int;
+
+                let limit = bit.wrapping_shl(rest as u32);
+                let negative_mask = limit.wrapping_sub((size > 0) as $int);
+                let positioned_used_bits = negative_mask << position;
+                let positioned_mask = !positioned_used_bits;
+                let cleared = self.0 & positioned_mask;
+
+                let shifted_value = value << position;
+
+                let result = cleared | shifted_value;
+
+                Self(result)
             }
         }
 
@@ -441,27 +471,64 @@ mod tests {
     fn all_functions() {
         let mut bf = BitField8::new();
         assert_eq!(bf, 0b0000_0000);
-        assert!(!bf.bit(3));
-        assert_eq!(bf.field(3, 1), 0);
-        assert_eq!(bf.field(2, 2), 0);
-        assert_eq!(bf.field(0, 0), 0);
-
-        bf = bf.set_bit(3, true);
-        assert_eq!(bf, 0b0000_1000);
+        assert_eq!(bf.value(), 0b0000_0000);
+        assert_eq!(bf.field(0, 8), 0b0000_0000);
+        assert_eq!(bf.field(1, 7), 0b000_0000);
+        assert_eq!(bf.field(0, 4), 0b0000);
+        assert_eq!(bf.field(1, 3), 0b000);
+        assert_eq!(bf.field(1, 2), 0b00);
+        assert_eq!(bf.field(2, 2), 0b00);
+        assert!(!bf.bit(0));
+        assert!(!bf.bit(1));
         assert!(!bf.bit(2));
-        assert!(bf.bit(3));
-        assert_eq!(bf.field(3, 1), 1);
-        assert_eq!(bf.field(2, 2), 1 << 1);
-        
+        assert!(!bf.bit(3));
+
+        bf = bf.set_bit(1, true);
+        assert_eq!(bf, 0b0000_0010);
+        assert_eq!(bf.value(), 0b0000_0010);
+        assert_eq!(bf.field(0, 8), 0b0000_0010);
+        assert_eq!(bf.field(1, 7), 0b000_0001);
+        assert_eq!(bf.field(0, 4), 0b0010);
+        assert_eq!(bf.field(0, 2), 0b10);
+        assert_eq!(bf.field(1, 2), 0b01);
+        assert!(!bf.bit(0));
+        assert!(bf.bit(1));
+        assert!(!bf.bit(2));
+        assert!(!bf.bit(3));
+
         bf = bf.set_bit(2, true);
-        assert_eq!(bf, 0b0000_1100);
+        assert_eq!(bf, 0b0000_0110);
+        assert_eq!(bf.value(), 0b0000_0110);
+        assert_eq!(bf.field(0, 8), 0b0000_0110);
+        assert_eq!(bf.field(1, 7), 0b000_0011);
+        assert_eq!(bf.field(0, 4), 0b0110);
+        assert_eq!(bf.field(0, 2), 0b10);
+        assert_eq!(bf.field(1, 2), 0b11);
+        assert!(!bf.bit(0));
+        assert!(bf.bit(1));
         assert!(bf.bit(2));
-        assert!(bf.bit(3));
-        assert_eq!(bf.field(3, 1), 1);
-        assert_eq!(bf.field(2, 2), (1 << 1) | 1);
+        assert!(!bf.bit(3));
         
-        bf = bf.set_field(3, 4, 0b1111);
-        assert_eq!(bf, 0b0111_1100);
+        bf = bf.set_field(4, 4, 0b1111);
+        assert_eq!(bf, 0b1111_0110);
+        assert_eq!(bf.value(), 0b1111_0110);
+        assert_eq!(bf.field(0, 8), 0b1111_0110);
+        assert_eq!(bf.field(1, 7), 0b111_1011);
+
+        bf = BitField8::new().set_field(0, 8, 0b1111_1111);
+        assert_eq!(bf, 0b1111_1111);
+        assert_eq!(bf.value(), 0b1111_1111);
+        assert_eq!(bf.field(0, 8), 0b1111_1111);
+
+        bf = BitField8::new().set_field(1, 7, 0b0111_1111);
+        assert_eq!(bf, 0b1111_1110);
+        assert_eq!(bf.value(), 0b1111_1110);
+        assert_eq!(bf.field(0, 8), 0b1111_1110);
+
+        bf = BitField8::new().set_field(0, 7, 0b0111_1111);
+        assert_eq!(bf, 0b01111_111);
+        assert_eq!(bf.value(), 0b01111_111);
+        assert_eq!(bf.field(0, 8), 0b01111_111);
     }
 
     #[test]
@@ -470,10 +537,19 @@ mod tests {
         BitField8::new().bit(8);
     }
 
+    /*
+    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+    #[test]
+    #[should_panic(expected = "TODO")]
+    fn bounds_field_zero_size() {
+        BitField8::new().field(7, 0);
+    }
+    */
+
     #[test]
     #[should_panic(expected = "attempt to shift right with overflow")]
     fn bounds_field_position() {
-        BitField8::new().field(8, 0);
+        BitField8::new().field(8, 1);
     }
 
     /*
@@ -497,10 +573,19 @@ mod tests {
         let _ = BitField8::new().set_bit(8, true);
     }
 
+    /*
+    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
+    #[test]
+    #[should_panic(expected = "TODO")]
+    fn bounds_set_field_zero_size() {
+        let _ = BitField8::new().set_field(7, 0, 0);
+    }
+    */
+
     #[test]
     #[should_panic(expected = "attempt to shift left with overflow")]
     fn bounds_set_field_position() {
-        let _ = BitField8::new().set_field(8, 0, 0);
+        let _ = BitField8::new().set_field(8, 1, 0);
     }
 
     /*

@@ -9,9 +9,10 @@ None, the types work in a `#[no_std]` environment.
 ## Description
 
 A bit field can store simple boolean flags, as well as values of multiple bits in size.
-A `BitField` structure, for example `BitField16`, has the following 5 `const` functions:
+A `BitField` structure, for example `BitField16`, has the following 6 `const` functions:
 
 - `const fn new() -> Self`
+- `const fn value(&self) -> u16`
 - `const fn bit(&self, position: u8) -> bool`
 - `const fn set_bit(&self, position: u8, value: bool) -> Self`
 - `const fn field(&self, position: u8, size: u8) -> u16`
