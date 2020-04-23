@@ -381,21 +381,25 @@ macro_rules! BitField {
         pub struct $name($int);
 
         impl $name {
+            /// Creates a new instance.
             #[inline(always)]
             pub const fn new() -> Self {
                 Self(0)
             }
 
+            /// Returns the complete internal value.
             #[inline(always)]
             pub const fn value(&self) -> $int {
                 self.0
             }
 
+            /// Returns a boolean value whether the specified flag is set.
             #[inline(always)]
             pub const fn bit(&self, position: u8) -> bool {
                 ((self.0 >> position) & 1) != 0
             }
 
+            /// Returns a modified variant with the flag set to the specified value.
             #[inline(always)]
             pub const fn set_bit(&self, position: u8, value: bool) -> Self {
                 let cleared = self.0 & !(1 << position);
@@ -403,6 +407,7 @@ macro_rules! BitField {
                 Self(cleared | ((value as $int) << position))
             }
 
+            /// Returns a field (subset of bits) from the internal value.
             #[inline(always)]
             pub const fn field(&self, position: u8, size: u8) -> $int {
                 // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
@@ -422,6 +427,7 @@ macro_rules! BitField {
                 result
             }
 
+            /// Returns a modified variant with the field set to the specified value.
             #[inline(always)]
             pub const fn set_field(&self, position: u8, size: u8, value: $int) -> Self {
                 // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
