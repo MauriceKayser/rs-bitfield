@@ -194,7 +194,46 @@
 //! The write- or construct-only variant of the `Styles` structure can be built with the
 //! `BitField32` type like so:
 //!
-//! ```ignore
+//! ```rust
+//! # #[repr(u8)]
+//! # pub enum Button {
+//! #     Ok,
+//! #     OkCancel,
+//! #     AbortRetryIgnore,
+//! #     YesNoCancel,
+//! #     YesNo,
+//! #     RetryCancel,
+//! #     CancelTryContinue
+//! #     // Value `7` is unused.
+//! # }
+//! #
+//! # #[repr(u8)]
+//! # pub enum DefaultButton {
+//! #     One,
+//! #     Two,
+//! #     Three,
+//! #     Four
+//! #     // Values `4` - `7` are unused.
+//! # }
+//! #
+//! # #[repr(u8)]
+//! # pub enum Icon {
+//! #     None,
+//! #     Error,
+//! #     Question,
+//! #     Warning,
+//! #     Information
+//! #     // Values `5` - `7` are unused.
+//! # }
+//! #
+//! # #[repr(u8)]
+//! # pub enum Modality {
+//! #     Application,
+//! #     System,
+//! #     Task
+//! #     // Value `3` is unused.
+//! # }
+//! #
 //! #[repr(C)]
 //! pub struct Styles(bitfield::BitField32);
 //!
@@ -252,9 +291,90 @@
 //!
 //! For the read-write variant of the `Styles` structure the following code has to be added:
 //!
-//! ```ignore
+//! ```rust
 //! use core::convert::TryFrom;
-//!
+//! #
+//! # #[repr(u8)]
+//! # pub enum Button {
+//! #     Ok,
+//! #     OkCancel,
+//! #     AbortRetryIgnore,
+//! #     YesNoCancel,
+//! #     YesNo,
+//! #     RetryCancel,
+//! #     CancelTryContinue
+//! #     // Value `7` is unused.
+//! # }
+//! #
+//! # #[repr(u8)]
+//! # pub enum DefaultButton {
+//! #     One,
+//! #     Two,
+//! #     Three,
+//! #     Four
+//! #     // Values `4` - `7` are unused.
+//! # }
+//! #
+//! # #[repr(u8)]
+//! # pub enum Icon {
+//! #     None,
+//! #     Error,
+//! #     Question,
+//! #     Warning,
+//! #     Information
+//! #     // Values `5` - `7` are unused.
+//! # }
+//! #
+//! # #[repr(u8)]
+//! # pub enum Modality {
+//! #     Application,
+//! #     System,
+//! #     Task
+//! #     // Value `3` is unused.
+//! # }
+//! #
+//! # #[repr(C)]
+//! # pub struct Styles(bitfield::BitField32);
+//! #
+//! # #[repr(u8)]
+//! # pub enum Style {
+//! #     Help = 14,
+//! #     SetForeground = 16,
+//! #     DefaultDesktopOnly,
+//! #     TopMost,
+//! #     Right,
+//! #     RightToLeftReading,
+//! #     ServiceNotification
+//! # }
+//! #
+//! # impl Styles {
+//! #     pub const fn new() -> Self {
+//! #         Self(bitfield::BitField32::new())
+//! #     }
+//! #
+//! #     pub const fn set(&self, style: Style, value: bool) -> Self {
+//! #         Self(self.0.set_bit(style as u8, value))
+//! #     }
+//! #
+//! #     // Field setters
+//! #
+//! #     pub const fn set_button(&self, button: Button) -> Self {
+//! #         Self(self.0.set_field(0, 4, button as u32))
+//! #     }
+//! #
+//! #     pub const fn set_icon(&self, icon: Icon) -> Self {
+//! #         Self(self.0.set_field(4, 4, icon as u32))
+//! #     }
+//! #
+//! #     pub const fn set_default_button(&self, default_button: DefaultButton) -> Self {
+//! #         Self(self.0.set_field(8, 4, default_button as u32))
+//! #     }
+//! #
+//! #     pub const fn set_modality(&self, modality: Modality) -> Self {
+//! #         Self(self.0.set_field(12, 2, modality as u32))
+//! #     }
+//! # }
+//! #
 //! impl Styles {
 //!     pub const fn is_set(&self, style: Style) -> bool {
 //!         self.0.bit(style as u8)
@@ -372,10 +492,12 @@
 #![no_std]
 
 #[cfg(test)]
+extern crate alloc;
+#[cfg(test)]
 extern crate std;
 
-macro_rules! BitField {
-    ($name:ident : $int:ident) => {
+macro_rules! bit_field {
+    ($name:ident: $int:ident) => {
         #[repr(C)]
         #[derive(Copy, Clone, Debug, Eq, PartialEq)]
         pub struct $name($int);
@@ -462,12 +584,87 @@ macro_rules! BitField {
     };
 }
 
-BitField!(BitField8: u8);
-BitField!(BitField16: u16);
-BitField!(BitField32: u32);
-BitField!(BitField64: u64);
-BitField!(BitField128: u128);
-BitField!(BitFieldSize: usize);
+/// This macro generates a `core::fmt::Debug` implementation for simple bit fields, which only
+/// consist of bit flags.
+///
+/// - First parameter: The type which holds the flag values.
+/// - Second parameter: An expression that yields a slice of flags (or bit indices).
+///
+/// Example code:
+///
+/// ```rust
+/// // Implementation
+///
+/// extern crate alloc;
+///
+/// struct Flags(bitfield::BitField8);
+///
+/// impl Flags {
+///     const fn new() -> Self {
+///         Self(bitfield::BitField8::new())
+///     }
+///
+///     const fn set(self, flag: Flag, value: bool) -> Self {
+///          Self(self.0.set_bit(flag as u8, value))
+///     }
+/// }
+///
+/// #[derive(Clone, Copy, Debug)]
+/// #[repr(u8)]
+/// enum Flag {
+///     F1,
+///     F2,
+///     F3
+/// }
+///
+/// impl Flag {
+///     fn iter() -> &'static [Flag] {
+///         &[Flag::F1, Flag::F2, Flag::F3]
+///     }
+/// }
+///
+/// bitfield::impl_debug!(Flags, Flag::iter());
+///
+/// // Tests
+///
+/// let flags = Flags::new();
+/// assert_eq!(&alloc::format!("{:?}", flags), "-");
+///
+/// let flags = Flags::new().set(Flag::F1, true).set(Flag::F3, true);
+/// assert_eq!(&alloc::format!("{:?}", flags), "F1 | F3");
+/// ```
+#[macro_export]
+macro_rules! impl_debug {
+    ($field:ident, $iter:expr) => {
+        impl core::fmt::Debug for $field {
+            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+                let mut formatted = alloc::string::String::new();
+
+                for flag in $iter {
+                    if self.0.bit(*flag as u8) {
+                        if formatted.len() > 0 {
+                            formatted.push_str(" | ");
+                        }
+                        formatted.push_str(&alloc::format!("{:?}", flag));
+                    }
+                }
+
+                if formatted.len() == 0 {
+                    formatted.push('-');
+                }
+
+                f.write_str(formatted.as_ref())
+            }
+        }
+    }
+}
+
+bit_field!(BitField8: u8);
+bit_field!(BitField16: u16);
+bit_field!(BitField32: u32);
+bit_field!(BitField64: u64);
+bit_field!(BitField128: u128);
+bit_field!(BitFieldSize: usize);
 
 #[cfg(test)]
 mod tests {
