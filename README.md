@@ -1,6 +1,6 @@
 # Bit fields for Rust
 
-Provides structures which simplify bit level access to primitive types in Rust.
+Provides macros and types which simplify bit level access to primitive types in Rust.
 
 ## Dependencies
 
@@ -8,22 +8,13 @@ None, the types work in a `#[no_std]` environment.
 
 ## Description
 
-A bit field can store simple boolean flags, as well as values of multiple bits in size.
-A `BitField` structure, for example `BitField16`, has the following 6 `const` functions:
-
-- `const fn new() -> Self`
-- `const fn value(&self) -> u16`
-- `const fn bit(&self, position: u8) -> bool`
-- `const fn set_bit(&self, position: u8, value: bool) -> Self`
-- `const fn field(&self, position: u8, size: u8) -> u16`
-- `const fn set_field(&self, position: u8, size: u8, value: u16) -> Self`
-
-The setters return a modified copy of their own value, so the builder pattern can be used
-to construct such a bit field.
+A bit field can store simple boolean flags, as well as values of multiple bits in size. This
+crate provides types based on the primitive types `u8`, `u16`, `u32`, `u64`, `u128` and `usize`,
+which simplify bit level access to values of those primitive types.
 
 ## Simple example
 
-Imagine the following type which can store up to 16 flags in a `u16` value:
+Imagine the following type which can store up to 16 boolean flags in a `u16` value:
 
 ```rust
 pub const IS_SYSTEM:    u16 = 1 << 0; // 1
@@ -48,32 +39,37 @@ if (executable_flags & IS_LIBRARY) != 0 {
 }
 ```
 
-With the help of this crate this can be expressed as follows:
+With the help of this crate this can be expressed in a type safe way as follows:
 
 ```rust
-#[repr(C)]
-pub struct ExecutableFlags(bitfield::BitField16);
+// Implementation
 
+extern crate alloc;
+
+bitfield::bit_field!(
+    ExecutableFlags: u16;
+    flags:
+        has + set: ExecutableFlag
+);
+
+#[derive(Clone, Copy, Debug)]
 #[repr(u8)]
-pub enum ExecutableFlag {
+enum ExecutableFlag {
     System,
     Library,
     X64 = 3
 }
 
-impl ExecutableFlags {
-    pub const fn new() -> Self {
-        Self(bitfield::BitField16::new())
-    }
-
-    pub const fn is_set(&self, flag: ExecutableFlag) -> bool {
-        self.0.bit(flag as u8)
-    }
-
-    pub const fn set(&self, flag: ExecutableFlag, value: bool) -> Self {
-        Self(self.0.set_bit(flag as u8, value))
+/// Instead of manually implementing this, `#[derive(enum_extensions::Iterator)]` of the
+/// [enum_extensions](https://github.com/MauriceKayser/rs-enum_extensions)
+/// crate can be used for automatic generation.
+impl ExecutableFlag {
+    const fn iter() -> &'static [Self] {
+        &[ExecutableFlag::System, ExecutableFlag::Library, ExecutableFlag::X64]
     }
 }
+
+// Usage
 
 extern "C" fn bla() -> ExecutableFlags;
 extern "C" fn foo(executable_flags: ExecutableFlags);
@@ -82,7 +78,7 @@ extern "C" fn foo(executable_flags: ExecutableFlags);
 
 let executable_flags = bla().set(ExecutableFlag::System).set(ExecutableFlag::X64);
 
-if executable_flags.is_set(ExecutableFlag::Library) {
+if executable_flags.has(ExecutableFlag::Library) {
     foo(executable_flags);
 }
 ```
@@ -152,7 +148,7 @@ All of the fields can be expressed by shifting them to the right (removing the t
 
 ```rust
 #[repr(u8)]
-pub enum Button {
+enum Button {
     Ok,
     OkCancel,
     AbortRetryIgnore,
@@ -164,7 +160,7 @@ pub enum Button {
 }
 
 #[repr(u8)]
-pub enum DefaultButton {
+enum DefaultButton {
     One,
     Two,
     Three,
@@ -173,7 +169,7 @@ pub enum DefaultButton {
 }
 
 #[repr(u8)]
-pub enum Icon {
+enum Icon {
     None,
     Error,
     Question,
@@ -183,7 +179,7 @@ pub enum Icon {
 }
 
 #[repr(u8)]
-pub enum Modality {
+enum Modality {
     Application,
     System,
     Task
@@ -191,15 +187,77 @@ pub enum Modality {
 }
 ```
 
-The write- or construct-only variant of the `Styles` structure can be built with the
-`BitField32` type like so:
+The 32-bit wide `Styles` bit field representing this structure can be generated like this:
 
 ```rust
-#[repr(C)]
-pub struct Styles(bitfield::BitField32);
+extern crate alloc;
 
+#[derive(Copy, Clone, Debug)]
 #[repr(u8)]
-pub enum Style {
+enum Button {
+    Ok,
+    OkCancel,
+    AbortRetryIgnore,
+    YesNoCancel,
+    YesNo,
+    RetryCancel,
+    CancelTryContinue
+    // Value `7` is unused.
+}
+
+/// Instead of manually implementing this, `#[derive(enum_extensions::FromPrimitive)]` of the
+/// [enum_extensions](https://github.com/MauriceKayser/rs-enum_extensions)
+/// crate can be used for automatic generation.
+impl core::convert::TryFrom<u8> for Button {
+    type Error = u8;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            v if v == Self::Ok                  as u8 => Ok(Self::Ok),
+            v if v == Self::OkCancel            as u8 => Ok(Self::OkCancel),
+            v if v == Self::AbortRetryIgnore    as u8 => Ok(Self::AbortRetryIgnore),
+            v if v == Self::YesNoCancel         as u8 => Ok(Self::YesNoCancel),
+            v if v == Self::YesNo               as u8 => Ok(Self::YesNo),
+            v if v == Self::RetryCancel         as u8 => Ok(Self::RetryCancel),
+            v if v == Self::CancelTryContinue   as u8 => Ok(Self::CancelTryContinue),
+            _ => Err(value),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, enum_extensions::FromPrimitive)]
+#[repr(u8)]
+enum DefaultButton {
+    One,
+    Two,
+    Three,
+    Four
+    // Values `4` - `7` are unused.
+}
+
+#[derive(Copy, Clone, Debug, enum_extensions::FromPrimitive)]
+#[repr(u8)]
+enum Icon {
+    None,
+    Error,
+    Question,
+    Warning,
+    Information
+    // Values `5` - `7` are unused.
+}
+
+#[derive(Copy, Clone, Debug, enum_extensions::FromPrimitive)]
+#[repr(u8)]
+enum Modality {
+    Application,
+    System,
+    Task
+    // Value `3` is unused.
+}
+
+#[derive(Clone, Copy, Debug, enum_extensions::Iterator)]
+#[repr(u8)]
+enum Style {
     Help = 14,
     SetForeground = 16,
     DefaultDesktopOnly,
@@ -209,33 +267,21 @@ pub enum Style {
     ServiceNotification
 }
 
-impl Styles {
-    pub const fn new() -> Self {
-        Self(bitfield::BitField32::new())
-    }
-
-    pub const fn set(&self, style: Style, value: bool) -> Self {
-        Self(self.0.set_bit(style as u8, value))
-    }
-
-    // Field setters
-
-    pub const fn set_button(&self, button: Button) -> Self {
-        Self(self.0.set_field(0, 4, button as u32))
-    }
-
-    pub const fn set_icon(&self, icon: Icon) -> Self {
-        Self(self.0.set_field(4, 4, icon as u32))
-    }
-
-    pub const fn set_default_button(&self, default_button: DefaultButton) -> Self {
-        Self(self.0.set_field(8, 4, default_button as u32))
-    }
-
-    pub const fn set_modality(&self, modality: Modality) -> Self {
-        Self(self.0.set_field(12, 2, modality as u32))
-    }
-}
+bitfield::bit_field!(
+    Styles: u32;
+    flags:
+        // Flags spanning bits 14-21.
+        has            + set:                Style;
+    fields:
+        // Field spanning bits 0-3.
+        button         + set_button:         Button[u8:        0,  4]
+        // Field spanning bits 4-7.
+        icon           + set_icon:           Icon[u8:          4,  4]
+        // Field spanning bits 8-11.
+        default_button + set_default_button: DefaultButton[u8: 8,  4]
+        // Field spanning bits 12-13.
+        modality       + set_modality:       Modality[u8:      12, 2]
+);
 ```
 
 It can now be constructed and used as follows:
@@ -247,118 +293,8 @@ let styles = Styles::new()
     .set(Style::Right, true)
     .set(Style::TopMost, true);
 
-let result = user32::MessageBoxW(/* ... */, styles);
-```
-
-For the read-write variant of the `Styles` structure the following code has to be added:
-
-```rust
-use core::convert::TryFrom;
-
-impl Styles {
-    pub const fn is_set(&self, style: Style) -> bool {
-        self.0.bit(style as u8)
-    }
-
-    // Field getters
-    //
-    // They must return a `core::result::Result`, because the bits can represent values which
-    // are not among the defined enumeration variants.
-    //
-    // They can not be `const` until [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632) is done.
-
-    pub fn button(&self) -> Result<Button, u8> {
-        Button::try_from(self.0.field(0, 4) as u8)
-    }
-
-    pub fn icon(&self) -> Result<Icon, u8> {
-        Icon::try_from(self.0.field(4, 4) as u8)
-    }
-
-    pub fn default_button(&self) -> Result<DefaultButton, u8> {
-        DefaultButton::try_from(self.0.field(8, 4) as u8)
-    }
-
-    pub fn modality(&self) -> Result<Modality, u8> {
-        Modality::try_from(self.0.field(12, 2) as u8)
-    }
-}
-
-// Convert from `u8` to our enumerations, necessary for the `Field getters` part.
-// An alternative to the manual implementation is using a crate like:
-// [from-primitive](https://github.com/MauriceKayser/rs-from-primitive)
-
-impl core::convert::TryFrom<u8> for Button {
-    type Error = u8;
-
-    fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
-        match value {
-            v if v == Self::Ok                  as u8 => Ok(Self::Ok),
-            v if v == Self::OkCancel            as u8 => Ok(Self::OkCancel),
-            v if v == Self::AbortRetryIgnore    as u8 => Ok(Self::AbortRetryIgnore),
-            v if v == Self::YesNoCancel         as u8 => Ok(Self::YesNoCancel),
-            v if v == Self::YesNo               as u8 => Ok(Self::YesNo),
-            v if v == Self::RetryCancel         as u8 => Ok(Self::RetryCancel),
-            v if v == Self::CancelTryContinue   as u8 => Ok(Self::CancelTryContinue),
-            _ => Err(value)
-        }
-    }
-}
-
-impl core::convert::TryFrom<u8> for DefaultButton {
-    type Error = u8;
-
-    fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
-        match value {
-            v if v == Self::One     as u8 => Ok(Self::One),
-            v if v == Self::Two     as u8 => Ok(Self::Two),
-            v if v == Self::Three   as u8 => Ok(Self::Three),
-            v if v == Self::Four    as u8 => Ok(Self::Four),
-            _ => Err(value)
-        }
-    }
-}
-
-impl core::convert::TryFrom<u8> for Icon {
-    type Error = u8;
-
-    fn try_from(value: u8) -> core::result::Result<Self, <Icon as core::convert::TryFrom<u8>>::Error> {
-        match value {
-            v if v == Self::None        as u8 => Ok(Self::None),
-            v if v == Self::Error       as u8 => Ok(Self::Error),
-            v if v == Self::Question    as u8 => Ok(Self::Question),
-            v if v == Self::Warning     as u8 => Ok(Self::Warning),
-            v if v == Self::Information as u8 => Ok(Self::Information),
-            _ => Err(value)
-        }
-    }
-}
-
-impl core::convert::TryFrom<u8> for Modality {
-    type Error = u8;
-
-    fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
-        match value {
-            v if v == Self::Application as u8 => Ok(Self::Application),
-            v if v == Self::System      as u8 => Ok(Self::System),
-            v if v == Self::Task        as u8 => Ok(Self::Task),
-            _ => Err(value)
-        }
-    }
-}
-```
-
-It can now be constructed and used as follows:
-
-```rust
-let styles = Styles::new()
-    .set_button(Button::OkCancel)
-    .set_icon(Icon::Information)
-    .set(Style::Right, true)
-    .set(Style::TopMost, true);
-
-// `Button == Button` needs `#[derive(PartialEq)]` for `Button`.
-if styles.is_set(Style::Help) && styles.button().unwrap() == Button::OkCancel {
+// `Button == Button` requires `#[derive(PartialEq)]` for `Button`.
+if styles.has(Style::Help) && styles.button() == Ok(Button::OkCancel) {
     let result = user32::MessageBoxW(/* ... */, styles.set_button(Button::YesNo));
 }
 ```
