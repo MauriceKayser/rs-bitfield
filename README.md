@@ -268,6 +268,7 @@ enum Style {
 }
 
 bitfield::bit_field!(
+    /// MessageBox styles, see [user32.MessageBox function](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messagebox).
     Styles: u32;
     flags:
         // Flags spanning bits 14-21.

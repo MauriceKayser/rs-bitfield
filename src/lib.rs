@@ -268,6 +268,7 @@
 //! }
 //!
 //! bitfield::bit_field!(
+//!     /// MessageBox styles, see [user32.MessageBox function](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messagebox).
 //!     Styles: u32;
 //!     flags:
 //!         // Flags spanning bits 14-21.
@@ -642,199 +643,199 @@ extern crate std;
 macro_rules! bit_field {
     // Flags only.
     (
-        $visibility:vis $bit_field:ident : u8;
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u8;
         flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
     ) => {
         $crate::bit_field!(1
-            $visibility $bit_field : $crate::BitField8, u8;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField8, u8;
             flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u16;
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u16;
         flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
     ) => {
         $crate::bit_field!(1
-            $visibility $bit_field : $crate::BitField16, u16;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField16, u16;
             flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u32;
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u32;
         flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
     ) => {
         $crate::bit_field!(1
-            $visibility $bit_field : $crate::BitField32, u32;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField32, u32;
             flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u64;
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u64;
         flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
     ) => {
         $crate::bit_field!(1
-            $visibility $bit_field : $crate::BitField64, u64;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField64, u64;
             flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u128;
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u128;
         flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
     ) => {
         $crate::bit_field!(1
-            $visibility $bit_field : $crate::BitField128, u128;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField128, u128;
             flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : usize;
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : usize;
         flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
     ) => {
         $crate::bit_field!(1
-            $visibility $bit_field : $crate::BitFieldSize, usize;
+            $(#[$attr])* $visibility $bit_field : $crate::BitFieldSize, usize;
             flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
         );
     };
     // Flags and fields.
     (
-        $visibility:vis $bit_field:ident : u8
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u8
           ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
         $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField8, u8;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField8, u8;
             flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
             fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
         );
     };
     (
-        $visibility:vis $bit_field:ident : u8
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u8
         $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
           ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField8, u8;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField8, u8;
             flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
             fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u16
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u16
           ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
         $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField16, u16;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField16, u16;
             flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
             fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
         );
     };
     (
-        $visibility:vis $bit_field:ident : u16
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u16
         $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
           ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField16, u16;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField16, u16;
             flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
             fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u32
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u32
           ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
         $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField32, u32;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField32, u32;
             flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
             fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
         );
     };
     (
-        $visibility:vis $bit_field:ident : u32
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u32
         $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
           ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField32, u32;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField32, u32;
             flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
             fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u64
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u64
           ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
         $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField64, u64;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField64, u64;
             flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
             fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
         );
     };
     (
-        $visibility:vis $bit_field:ident : u64
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u64
         $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
           ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField64, u64;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField64, u64;
             flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
             fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : u128
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u128
           ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
         $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField128, u128;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField128, u128;
             flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
             fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
         );
     };
     (
-        $visibility:vis $bit_field:ident : u128
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u128
         $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
           ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitField128, u128;
+            $(#[$attr])* $visibility $bit_field : $crate::BitField128, u128;
             flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
             fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
         );
     };
     (
-        $visibility:vis $bit_field:ident : usize
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : usize
           ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
         $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitFieldSize, usize;
+            $(#[$attr])* $visibility $bit_field : $crate::BitFieldSize, usize;
             flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
             fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
         );
     };
     (
-        $visibility:vis $bit_field:ident : usize
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : usize
         $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
           ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $crate::BitFieldSize, usize;
+            $(#[$attr])* $visibility $bit_field : $crate::BitFieldSize, usize;
             flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
             fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
         );
     };
     // Flags only.
     (1
-        $visibility:vis $bit_field:ident : $bit_field_type:ty, $bit_field_sub_type:ty;
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : $bit_field_type:ty, $bit_field_sub_type:ty;
         flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
     ) => {
         $crate::bit_field!(2
-            $visibility $bit_field : $bit_field_type, $bit_field_sub_type;
+            $(#[$attr])* $visibility $bit_field : $bit_field_type, $bit_field_sub_type;
             flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+;
             fields:
         );
@@ -864,11 +865,11 @@ macro_rules! bit_field {
     };
     // Flags and fields.
     (2
-        $visibility:vis $bit_field:ident : $bit_field_type:ty, $bit_field_sub_type:ty
+        $(#[$attr:meta])* $visibility:vis $bit_field:ident : $bit_field_type:ty, $bit_field_sub_type:ty
         ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),*
         ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),*
     ) => {
-        $visibility struct $bit_field($bit_field_type);
+        $(#[$attr])* $visibility struct $bit_field($bit_field_type);
 
         impl $bit_field {
             /// Creates a new instance with all flags set to `false`.
