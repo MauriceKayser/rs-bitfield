@@ -897,7 +897,7 @@ macro_rules! bit_field {
 
             // Generate field getters and setters.
             $(
-                /// Returns a boolean value whether the specified flag is set.
+                /// Returns the field's value if it is a valid enum variant, or the numeric value otherwise.
                 #[inline(always)]
                 $field_get_visibility fn $field_get(&self) -> core::result::Result<$field_type, $field_sub_type> {
                     core::convert::TryInto::<$field_type>::try_into(
@@ -905,7 +905,7 @@ macro_rules! bit_field {
                     )
                 }
 
-                /// Returns a modified instance with the flag set to the specified value.
+                /// Returns a modified instance with the field set to the specified value.
                 #[inline(always)]
                 $field_set_visibility const fn $field_set(&self, value: $field_type) -> Self {
                     Self(self.0.set_field($field_index, $field_size, value as $bit_field_sub_type))
