@@ -869,7 +869,9 @@ macro_rules! bit_field {
         ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),*
         ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),*
     ) => {
-        $(#[$attr])* $visibility struct $bit_field($bit_field_type);
+        #[repr(C)]
+        $(#[$attr])*
+        $visibility struct $bit_field($bit_field_type);
 
         impl $bit_field {
             /// Creates a new instance with all flags set to `false`.
