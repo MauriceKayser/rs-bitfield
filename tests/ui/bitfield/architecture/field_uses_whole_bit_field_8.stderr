@@ -1,0 +1,7 @@
+error[E0080]: evaluation of constant value failed
+ --> $DIR/field_uses_whole_bit_field_8.rs:5:1
+  |
+5 | #[bitfield::bitfield(size)]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ attempt to compute `0_usize - 1_usize`, which would overflow
+  |
+  = note: this error originates in an attribute macro (in Nightly builds, run with -Z macro-backtrace for more info)

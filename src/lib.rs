@@ -1,493 +1,73 @@
-//! # Bit fields for Rust
+//! This crate provides the three macros `bitfield`, `Field` and `Flags` to interoperate with low
+//! level, typically operating system related types which store data with sub-byte precision, like
+//! boolean flags or sub-byte fields, in a type-safe, typical rust way.
 //!
-//! Provides macros and types which simplify bit level access to primitive types in Rust.
-//!
-//! ## Dependencies
-//!
-//! None, the types work in a `#[no_std]` environment.
-//!
-//! ## Description
-//!
-//! A bit field can store simple boolean flags, as well as values of multiple bits in size. This
-//! crate provides types based on the primitive types `u8`, `u16`, `u32`, `u64`, `u128` and `usize`,
-//! which simplify bit level access to values of those primitive types.
-//!
-//! ## Simple example
-//!
-//! Imagine the following type which can store up to 16 boolean flags in a `u16` value:
-//!
-//! ```ignore
-//! pub const IS_SYSTEM:    u16 = 1 << 0; // 1
-//! pub const IS_LIBRARY:   u16 = 1 << 1; // 2
-//! // Undefined:                 1 << 2; // 4
-//! pub const IS_X64:       u16 = 1 << 3; // 8
-//! // ... up to 12 more flags ...
-//!
-//! extern "C" fn bla() -> u16;
-//! extern "C" fn foo(executable_flags: u16);
-//!
-//! // Usage
-//!
-//! let mut executable_flags = bla();
-//!
-//! // Add the system and x64 flags.
-//! executable_flags |= IS_SYSTEM | IS_X64;
-//!
-//! // Execute `foo` if the library flag is set.
-//! if (executable_flags & IS_LIBRARY) != 0 {
-//!     foo(executable_flags);
-//! }
-//! ```
-//!
-//! With the help of this crate this can be expressed in a type safe way as follows:
-//!
-//! ```ignore
-//! // Implementation
-//!
-//! extern crate alloc;
-//!
-//! bitfield::bit_field!(
-//!     ExecutableFlags: u16;
-//!     flags:
-//!         has + set: ExecutableFlag
-//! );
-//!
-//! #[derive(Clone, Copy, Debug)]
-//! #[repr(u8)]
-//! enum ExecutableFlag {
-//!     System,
-//!     Library,
-//!     X64 = 3
-//! }
-//!
-//! /// Instead of manually implementing this, `#[derive(enum_extensions::Iterator)]` of the
-//! /// [enum_extensions](https://github.com/MauriceKayser/rs-enum_extensions)
-//! /// crate can be used for automatic generation.
-//! impl ExecutableFlag {
-//!     const fn iter() -> &'static [Self] {
-//!         &[ExecutableFlag::System, ExecutableFlag::Library, ExecutableFlag::X64]
-//!     }
-//! }
-//!
-//! // Usage
-//!
-//! extern "C" fn bla() -> ExecutableFlags;
-//! extern "C" fn foo(executable_flags: ExecutableFlags);
-//!
-//! // Usage
-//!
-//! let executable_flags = bla().set(ExecutableFlag::System).set(ExecutableFlag::X64);
-//!
-//! if executable_flags.has(ExecutableFlag::Library) {
-//!     foo(executable_flags);
-//! }
-//! ```
-//!
-//! ## Detailed Example
-//!
-//! This example is based on the 4. parameter `UINT uType` of Microsoft Windows
-//! [user32.MessageBox function](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messagebox)
-//! which not only stores boolean flags, but also fields with more than one bit in size.
-//!
-//! A Microsoft Visual C++ `UINT` is a `u32` in Rust. So all constants for the parameter `uType` can be written as follows:
-//!
-//! ```rust
-//! // Buttons
-//! const MB_BUTTON_OK:                  u32 = 0;
-//! const MB_BUTTON_OK_CANCEL:           u32 = 1;
-//! const MB_BUTTON_ABORT_RETRY_IGNORE:  u32 = 2;
-//! const MB_BUTTON_YES_NO_CANCEL:       u32 = 3;
-//! const MB_BUTTON_YES_NO:              u32 = 4;
-//! const MB_BUTTON_RETRY_CANCEL:        u32 = 5;
-//! const MB_BUTTON_CANCEL_TRY_CONTINUE: u32 = 6;
-//!
-//! // Icons
-//! const MB_ICON_NONE:                  u32 = 0x00;
-//! const MB_ICON_ERROR:                 u32 = 0x10;
-//! const MB_ICON_QUESTION:              u32 = 0x20;
-//! const MB_ICON_EXCLAMATION:           u32 = 0x30;
-//! const MB_ICON_INFORMATION:           u32 = 0x40;
-//!
-//! // Default buttons
-//! const MB_DEFAULT_BUTTON1:            u32 = 0x000;
-//! const MB_DEFAULT_BUTTON2:            u32 = 0x100;
-//! const MB_DEFAULT_BUTTON3:            u32 = 0x200;
-//! const MB_DEFAULT_BUTTON4:            u32 = 0x300;
-//!
-//! // Modality
-//! const MB_MODALITY_APPLICATION:       u32 = 0x0000;
-//! const MB_MODALITY_SYSTEM:            u32 = 0x1000;
-//! const MB_MODALITY_TASK:              u32 = 0x2000;
-//!
-//! // Other flags
-//! const MB_HELP:                       u32 = 1 << 14;
-//! const MB_FOREGROUND:                 u32 = 1 << 16;
-//! const MB_DEFAULT_DESKTOP_ONLY:       u32 = 1 << 17;
-//! const MB_TOP_MOST:                   u32 = 1 << 18;
-//! const MB_RIGHT:                      u32 = 1 << 19;
-//! const MB_RIGHT_TO_LEFT_READING:      u32 = 1 << 20;
-//! const MB_SERVICE_NOTIFICATION:       u32 = 1 << 21;
-//! ```
-//!
-//! One problem is that `u32` is not type safe like an `enum` value, another is that the usage of an `u32` is error prone,
-//! because several "flags" of the same "type group" (called a "field"), like a button, can be `|`-ed together
-//! (f. e. `MB_BUTTON_ABORT_RETRY_IGNORE | MB_BUTTON_YES_NO`) which might result in some unexpected behaviour.
-//! Checking if certain fields, like a button, have a specific value is also unnecessarily complicated (bit fiddling
-//! operators like `>>` and `&` etc. are necessary).
-//!
-//! The previously mentioned fields are stored in the `u32` value as follows:
-//!
-//! | Type            | Min. def. value (`> 0`) | Max. def. value | Storage bits                                            | Max. storable value             |
-//! | --------------- | ----------------------- | --------------- | ------------------------------------------------------- | ------------------------------- |
-//! | `Button`        | 0x1                     | 0x6             | 0b0000_0000_0000_0000_0000_0000_0000_**XXXX** (0 - 4)   | `((1 << 4) - 1) <<  0` = 0x7    |
-//! | `Icon`          | 0x10                    | 0x40            | 0b0000_0000_0000_0000_0000_0000_**XXXX**_0000 (4 - 8)   | `((1 << 4) - 1) <<  4` = 0x70   |
-//! | `DefaultButton` | 0x100                   | 0x300           | 0b0000_0000_0000_0000_0000_**XXXX**_0000_0000 (8 - 12)  | `((1 << 4) - 1) <<  8` = 0x700  |
-//! | `Modality`      | 0x1000                  | 0x2000          | 0b0000_0000_0000_0000_00**XX**_0000_0000_0000 (12 - 13) | `((1 << 2) - 1) << 12` = 0x3000 |
-//!
-//! All of the fields can be expressed by shifting them to the right (removing the trailing zeros):
-//!
-//! ```rust
-//! #[repr(u8)]
-//! enum Button {
-//!     Ok,
-//!     OkCancel,
-//!     AbortRetryIgnore,
-//!     YesNoCancel,
-//!     YesNo,
-//!     RetryCancel,
-//!     CancelTryContinue
-//!     // Value `7` is unused.
-//! }
-//!
-//! #[repr(u8)]
-//! enum DefaultButton {
-//!     One,
-//!     Two,
-//!     Three,
-//!     Four
-//!     // Values `4` - `7` are unused.
-//! }
-//!
-//! #[repr(u8)]
-//! enum Icon {
-//!     None,
-//!     Error,
-//!     Question,
-//!     Warning,
-//!     Information
-//!     // Values `5` - `7` are unused.
-//! }
-//!
-//! #[repr(u8)]
-//! enum Modality {
-//!     Application,
-//!     System,
-//!     Task
-//!     // Value `3` is unused.
-//! }
-//! ```
-//!
-//! The 32-bit wide `Styles` bit field representing this structure can be generated like this:
-//!
-//! ```ignore
-//! extern crate alloc;
-//!
-//! #[derive(Copy, Clone, Debug)]
-//! #[repr(u8)]
-//! enum Button {
-//!     Ok,
-//!     OkCancel,
-//!     AbortRetryIgnore,
-//!     YesNoCancel,
-//!     YesNo,
-//!     RetryCancel,
-//!     CancelTryContinue
-//!     // Value `7` is unused.
-//! }
-//!
-//! /// Instead of manually implementing this, `#[derive(enum_extensions::FromPrimitive)]` of the
-//! /// [enum_extensions](https://github.com/MauriceKayser/rs-enum_extensions)
-//! /// crate can be used for automatic generation.
-//! impl core::convert::TryFrom<u8> for Button {
-//!     type Error = u8;
-//!
-//!     fn try_from(value: u8) -> Result<Self, Self::Error> {
-//!         match value {
-//!             v if v == Self::Ok                  as u8 => Ok(Self::Ok),
-//!             v if v == Self::OkCancel            as u8 => Ok(Self::OkCancel),
-//!             v if v == Self::AbortRetryIgnore    as u8 => Ok(Self::AbortRetryIgnore),
-//!             v if v == Self::YesNoCancel         as u8 => Ok(Self::YesNoCancel),
-//!             v if v == Self::YesNo               as u8 => Ok(Self::YesNo),
-//!             v if v == Self::RetryCancel         as u8 => Ok(Self::RetryCancel),
-//!             v if v == Self::CancelTryContinue   as u8 => Ok(Self::CancelTryContinue),
-//!             _ => Err(value),
-//!         }
-//!     }
-//! }
-//!
-//! #[derive(Copy, Clone, Debug, enum_extensions::FromPrimitive)]
-//! #[repr(u8)]
-//! enum DefaultButton {
-//!     One,
-//!     Two,
-//!     Three,
-//!     Four
-//!     // Values `4` - `7` are unused.
-//! }
-//!
-//! #[derive(Copy, Clone, Debug, enum_extensions::FromPrimitive)]
-//! #[repr(u8)]
-//! enum Icon {
-//!     None,
-//!     Error,
-//!     Question,
-//!     Warning,
-//!     Information
-//!     // Values `5` - `7` are unused.
-//! }
-//!
-//! #[derive(Copy, Clone, Debug, enum_extensions::FromPrimitive)]
-//! #[repr(u8)]
-//! enum Modality {
-//!     Application,
-//!     System,
-//!     Task
-//!     // Value `3` is unused.
-//! }
-//!
-//! #[derive(Clone, Copy, Debug, enum_extensions::Iterator)]
-//! #[repr(u8)]
-//! enum Style {
-//!     Help = 14,
-//!     SetForeground = 16,
-//!     DefaultDesktopOnly,
-//!     TopMost,
-//!     Right,
-//!     RightToLeftReading,
-//!     ServiceNotification
-//! }
-//!
-//! bitfield::bit_field!(
-//!     /// MessageBox styles, see [user32.MessageBox function](https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messagebox).
-//!     Styles: u32;
-//!     flags:
-//!         // Flags spanning bits 14-21.
-//!         has            + set:                Style;
-//!     fields:
-//!         // Field spanning bits 0-3.
-//!         button         + set_button:         Button[u8:        0,  4]
-//!         // Field spanning bits 4-7.
-//!         icon           + set_icon:           Icon[u8:          4,  4]
-//!         // Field spanning bits 8-11.
-//!         default_button + set_default_button: DefaultButton[u8: 8,  4]
-//!         // Field spanning bits 12-13.
-//!         modality       + set_modality:       Modality[u8:      12, 2]
-//! );
-//! ```
-//!
-//! It can now be constructed and used as follows:
-//!
-//! ```ignore
-//! let styles = Styles::new()
-//!     .set_button(Button::OkCancel)
-//!     .set_icon(Icon::Information)
-//!     .set(Style::Right, true)
-//!     .set(Style::TopMost, true);
-//!
-//! // `Button == Button` requires `#[derive(PartialEq)]` for `Button`.
-//! if styles.has(Style::Help) && styles.button() == Ok(Button::OkCancel) {
-//!     let result = user32::MessageBoxW(/* ... */, styles.set_button(Button::YesNo));
-//! }
-//! ```
-//!
-//! ## TODO
-//!
-//! - Bounds checking has to wait until [Allow panicking in constants](https://github.com/rust-lang/rust/issues/51999)
-//! is merged.
-//! - Update documentation if [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632) is done.
-
-#![no_std]
+//! For more specific documentation look at the documentation of the macros, or at the files in
+//! `examples/*`.
 
 #[cfg(test)]
-extern crate alloc;
-#[cfg(test)]
-extern crate std;
+#[macro_use]
+mod test;
 
-/// This macro generates a bit field structure, a constructur, a getter and setter for each flag
-/// enumeration and field, a `core::fmt::Debug` and for pure flag bit fields a `core::fmt::Display`
-/// implementation.
+mod bitfield;
+#[macro_use]
+mod enumeration;
+mod field;
+mod flags;
+
+/// Generates an abstraction of a primitive type which tightly stores information in a bit field.
 ///
-/// Example code (one flag type):
+/// # Example
 ///
-/// ```rust
-/// // Implementation
-///
-/// extern crate alloc;
-///
-/// bitfield::bit_field!(
-///     pub(crate) Flags: u8;
-///     flags:
-///         pub(crate) has + pub(crate) set: Flag
-/// );
-///
-/// #[derive(Clone, Copy, Debug)]
-/// #[repr(u8)]
-/// pub(crate) enum Flag {
-///     F0,
-///     F1,
-///     F2,
-///     FMax = 7
-/// }
-///
-/// impl Flag {
-///     const fn iter() -> &'static [Self] {
-///         &[Flag::F0, Flag::F1, Flag::F2, Flag::FMax]
-///     }
-/// }
-///
-/// // Tests
-///
-/// let mut flags = Flags::new();
-///
-/// assert!(!flags.has(Flag::F2));
-///
-/// flags = flags.set(Flag::F2, true);
-/// assert!(flags.has(Flag::F2));
-///
-/// flags = flags.set(Flag::FMax, true);
-/// assert!(flags.has(Flag::FMax));
-///
-/// assert_eq!(&alloc::format!("{}", &flags), "F2 | FMax");
-/// assert_eq!(
-///     &alloc::format!("{:?}", &flags),
-///     "Flags { F0: false, F1: false, F2: true, FMax: true }"
-/// );
-/// ```
-///
-/// Example code (multiple flag types):
+/// This 32 bit wide bit field stores 4 fields (3 with a size of 4, 1 with a size of 2 bits) and a
+/// few flags:
 ///
 /// ```rust
-/// // Implementation
+/// /// Layout:
+/// ///
+/// ///  31      27      23      19      15      11      7       3     0
+/// /// ╔═══════╧═══════╧═══╤═╤═╪═╤═╤═╤═╪═╤═╤═══╪═══════╪═══════╪═══════╗
+/// /// ║                   │S│R│R│T│D│F│ │H│Mod│DefBtn │Icon   │Button ║
+/// /// ║                   │N│T│ │M│D│ │ │ │   │       │       │       ║ Styles
+/// /// ║0 0 0 0 0 0 0 0 0 0│ │L│ │ │O│ │0│ │   │       │       │       ║
+/// /// ╚═══════════════════╧═╧═╧═╧═╧═╧═╧═╧═╧═══╧═══════╧═══════╧═══════╝
+/// ///          Button
+/// ///          Icon
+/// /// DefBtn = Default Button
+/// /// Mod    = Modality
+/// /// H      = Help
+/// /// F      = Foreground
+/// /// DDO    = Default Desktop Only
+/// /// TM     = Top Most
+/// /// R      = Right
+/// /// RTL    = Right To Left Reading
+/// /// SN     = Service Notification
+/// #[bitfield::bitfield(32)]
+/// struct Styles {
+///     #[field(size = 4)] button: Button,
+///     #[field(size = 4)] icon: Icon,
+///     #[field(size = 4)] default_button: DefaultButton,
+///     #[field(size = 2)] modality: Modality,
+///     style: Style
+/// }
 ///
-/// extern crate alloc;
-///
-/// bitfield::bit_field!(
-///     pub(crate) FileFlags: u32;
-///     flags:
-///         pub(crate) has        + pub(crate) set:        FileFlag,
-///         pub(crate) has_object + pub(crate) set_object: ObjectFlag
-/// );
-///
-/// bitfield::bit_field!(
-///     pub(crate) ProcessFlags: u32;
-///     flags:
-///         pub(crate) has        + pub(crate) set:        ProcessFlag,
-///         pub(crate) has_object + pub(crate) set_object: ObjectFlag
-/// );
-///
-/// // File object specific access flags, lower 16 bits.
-/// #[derive(Copy, Clone, Debug)]
+/// #[derive(Clone, Copy, bitfield::Flags)]
 /// #[repr(u8)]
-/// pub(crate) enum FileFlag {
-///     Read,
-///     Write,
-///     Append,
-///     Execute
+/// enum Style {
+///     Help = 14,
+///     // Bit 15 is reserved.
+///     Foreground = 16,
+///     DefaultDesktopOnly,
+///     TopMost,
+///     Right,
+///     RightToLeftReading,
+///     ServiceNotification
+///     // Bits 22 - 31 are reserved.
 /// }
 ///
-/// impl FileFlag {
-///     const fn iter() -> &'static [Self] {
-///         &[FileFlag::Read, FileFlag::Write, FileFlag::Append, FileFlag::Execute]
-///     }
-/// }
-///
-/// // Process object specific access flags, lower 16 bits.
-/// #[derive(Copy, Clone, Debug)]
+/// #[derive(Clone, Copy, bitfield::Field)]
 /// #[repr(u8)]
-/// pub(crate) enum ProcessFlag {
-///     Terminate,
-///     SuspendResume,
-///     ReadVirtualMemory,
-///     WriteVirtualMemory
-/// }
-///
-/// impl ProcessFlag {
-///     const fn iter() -> &'static [Self] {
-///         &[
-///             ProcessFlag::Terminate, ProcessFlag::SuspendResume,
-///             ProcessFlag::ReadVirtualMemory, ProcessFlag::WriteVirtualMemory
-///         ]
-///     }
-/// }
-///
-/// // General object access flags, upper 16 bits.
-/// #[derive(Copy, Clone, Debug)]
-/// #[repr(u8)]
-/// pub(crate) enum ObjectFlag {
-///     Delete = 16,
-///     Synchronize
-/// }
-///
-/// impl ObjectFlag {
-///     const fn iter() -> &'static [Self] {
-///         &[ObjectFlag::Delete, ObjectFlag::Synchronize]
-///     }
-/// }
-///
-/// // Tests
-///
-/// let mut file_flags = FileFlags::new();
-///
-/// assert!(!file_flags.has(FileFlag::Write));
-/// file_flags = file_flags.set(FileFlag::Write, true);
-/// assert!(file_flags.has(FileFlag::Write));
-///
-/// assert!(!file_flags.has_object(ObjectFlag::Delete));
-/// file_flags = file_flags.set_object(ObjectFlag::Delete, true);
-/// assert!(file_flags.has_object(ObjectFlag::Delete));
-///
-/// assert_eq!(&alloc::format!("{}", &file_flags), "Write | Delete");
-/// assert_eq!(
-///     &alloc::format!("{:?}", &file_flags),
-///     "FileFlags { Read: false, Write: true, Append: false, Execute: false, Delete: true, Synchronize: false }"
-/// );
-///
-/// let mut process_flags = ProcessFlags::new();
-///
-/// assert!(!process_flags.has(ProcessFlag::SuspendResume));
-/// process_flags = process_flags.set(ProcessFlag::SuspendResume, true);
-/// assert!(process_flags.has(ProcessFlag::SuspendResume));
-///
-/// assert!(!process_flags.has_object(ObjectFlag::Delete));
-/// process_flags = process_flags.set_object(ObjectFlag::Delete, true);
-/// assert!(process_flags.has_object(ObjectFlag::Delete));
-///
-/// assert_eq!(&alloc::format!("{}", &process_flags), "SuspendResume | Delete");
-/// assert_eq!(
-///     &alloc::format!("{:?}", &process_flags),
-///     "ProcessFlags { Terminate: false, SuspendResume: true, ReadVirtualMemory: false, WriteVirtualMemory: false, Delete: true, Synchronize: false }"
-/// );
-/// ```
-///
-/// Example code (multiple field types):
-///
-/// ```rust
-/// // Implementation
-///
-/// extern crate alloc;
-///
-/// bitfield::bit_field!(
-///     pub(crate) Field: u32;
-///     fields:
-///         // Field spanning bits 0-3.
-///         pub(crate) button         + pub(crate) set_button:         Button[u8: 0, 4],
-///         // Field spanning bits 4-7.
-///         pub(crate) default_button + pub(crate) set_default_button: DefaultButton[u8: 4, 4]
-/// );
-///
-/// #[derive(Debug, Eq, PartialEq)]
-/// #[repr(u8)]
-/// pub enum Button {
+/// enum Button {
 ///     Ok,
 ///     OkCancel,
 ///     AbortRetryIgnore,
@@ -495,684 +75,883 @@ extern crate std;
 ///     YesNo,
 ///     RetryCancel,
 ///     CancelTryContinue
-///     // Value `7` is unused.
+///     // Bits 7 - 15 are reserved.
 /// }
 ///
-/// #[derive(Debug, Eq, PartialEq)]
+/// #[derive(Clone, Copy, bitfield::Field)]
 /// #[repr(u8)]
-/// pub enum DefaultButton {
+/// enum DefaultButton {
 ///     One,
 ///     Two,
 ///     Three,
 ///     Four
-///     // Values `4` - `7` are unused.
+///     // Bits 4 - 15 are reserved.
 /// }
 ///
-/// impl core::convert::TryFrom<u8> for Button {
-///     type Error = u8;
-///
-///     fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
-///         match value {
-///             v if v == Self::Ok                as u8 => Ok(Self::Ok),
-///             v if v == Self::OkCancel          as u8 => Ok(Self::OkCancel),
-///             v if v == Self::AbortRetryIgnore  as u8 => Ok(Self::AbortRetryIgnore),
-///             v if v == Self::YesNoCancel       as u8 => Ok(Self::YesNoCancel),
-///             v if v == Self::YesNo             as u8 => Ok(Self::YesNo),
-///             v if v == Self::RetryCancel       as u8 => Ok(Self::RetryCancel),
-///             v if v == Self::CancelTryContinue as u8 => Ok(Self::CancelTryContinue),
-///             _ => Err(value)
-///         }
-///     }
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Icon {
+///     None,
+///     Stop,
+///     Question,
+///     Exclamation,
+///     Information
+///     // Bits 5 - 15 are reserved.
 /// }
 ///
-/// impl core::convert::TryFrom<u8> for DefaultButton {
-///     type Error = u8;
-///
-///     fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
-///         match value {
-///             v if v == Self::One   as u8 => Ok(Self::One),
-///             v if v == Self::Two   as u8 => Ok(Self::Two),
-///             v if v == Self::Three as u8 => Ok(Self::Three),
-///             v if v == Self::Four  as u8 => Ok(Self::Four),
-///             _ => Err(value)
-///         }
-///     }
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Modality {
+///     Application,
+///     System,
+///     Task
+///     // Bit 3 is reserved.
 /// }
 ///
-/// // Tests
+/// // Construction example:
 ///
-/// let mut field = Field::new();
+/// # fn main() {
+/// # mod user32 {
+/// #     #[allow(non_snake_case)]
+/// #     pub(super) fn MessageBoxW(_: usize, _: &str, _: &str, _: super::Styles) {}
+/// # }
+/// # let parent = 0;
+/// let styles = Styles::new()
+///     .set_button(Button::YesNo)
+///     .set_icon(Icon::Question)
+///     .set_style(Style::Foreground, true)
+///     .set_style(Style::TopMost, true);
 ///
-/// assert_eq!(field.button(), Ok(Button::Ok));
-/// field = field.set_button(Button::CancelTryContinue);
-/// assert_eq!(field.button(), Ok(Button::CancelTryContinue));
-///
-/// assert_eq!(field.default_button(), Ok(DefaultButton::One));
-/// field = field.set_default_button(DefaultButton::Four);
-/// assert_eq!(field.default_button(), Ok(DefaultButton::Four));
-///
-/// assert_eq!(
-///     &alloc::format!("{:?}", &field),
-///     "Field { button: Ok(CancelTryContinue), default_button: Ok(Four) }"
-/// );
+/// // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messageboxw
+/// user32::MessageBoxW(parent, "Text", "Title", styles);
+/// # }
 /// ```
 ///
-/// Example code (mixed):
+/// # 1. Macro usage
+///
+/// The following describes how to use the macro and which options it offers.
+///
+/// ## 1.1. Macro attribute
+///
+/// The macro attribute expects the amount of bits of the primitive type to abstract from, or
+/// `size` if the platform dependent `usize` should be used, f. e. to describe a CPU register, as in
+/// `examples/x86_debug_registers.rs`.
+///
+/// Examples:
+///
+/// ```ignore
+/// #[bitfield::bitfield(8)]    // Abstracts access to the bits in a `u8`.
+/// #[bitfield::bitfield(32)]   // Abstracts access to the bits in a `u32`.
+/// #[bitfield::bitfield(size)] // Abstracts access to the bits in a `usize`.
+/// ```
+///
+/// If fields or flags overlap, a compile time error will occur to warn the user of this crate about
+/// a possible layout mistake:
+///
+/// ```rust,compile_fail
+/// // error: `field_1` overlaps with field `field_0`.
+/// #[bitfield::bitfield(16)]
+/// struct BitField {
+///     #[field(bit = 0)] field_0: u8, // Field from bits 0 - 7.
+///     #[field(bit = 1)] field_1: u8  // Field from bits 1 - 8.
+/// }
+/// ```
+///
+/// If this is intentional, the comma separated identifier `allow_overlaps` can be appended after
+/// the amount of bits to suppress this error, as is necessary in
+/// `examples/windows_memory_protection.rs`.
 ///
 /// ```rust
-/// // Implementation
+/// #[bitfield::bitfield(16, allow_overlaps)]
+/// struct BitField {
+///     #[field(bit = 0)] field_0: u8,
+///     #[field(bit = 1)] field_1: u8
+/// }
+/// ```
 ///
+/// If the displayed error is `attempt to compute "0_usize - 1_usize", which would overflow` then
+/// the macro itself could not check the fields and flags for overlaps and generated code so the
+/// compiler can check it instead. If this happens check `tests/ui/bitfield/*` for hints.
+///
+/// ```rust,compile_fail
+/// // error: `field`, `Flag::Flag00000001` and `Flag::Flag00000010` overlap.
+/// #[bitfield::bitfield(8)]
+/// struct BitField {
+///     #[field(size = 2)] field: Field,
+///     flags: Flag
+/// }
+///
+/// #[derive(bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     Variant0,
+///     Variant1,
+///     Variant2,
+///     Variant3
+/// }
+///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00000001,
+///     Flag00000010,
+///     Flag00000100,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+/// ```
+///
+/// ## 1.2. Struct types
+///
+/// There are two different ways to define a bit field with the `bitfield::bitfield` macro.
+///
+/// ### 1.2.1 Tuple structs
+///
+/// If a bit field only contains one field or only flags, a tuple struct can be used.
+///
+/// #### 1.2.1.1 Flags
+///
+/// Example (using the `bitfield::Flags` macro):
+///
+/// ```rust
+/// /// Layout:
+/// ///
+/// ///  7       3     0
+/// /// ╔═══════╧═══════╗
+/// /// ║-----Flags-----║
+/// /// ║               ║ BitField
+/// /// ║               ║
+/// /// ╚═══════════════╝
+/// #[bitfield::bitfield(8)]
+/// struct Flags(Flag);
+///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00000001,
+///     Flag00000010,
+///     Flag00000100,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+/// ```
+///
+/// The names for the accessors described below are `has` and `set`.
+///
+/// #### 1.2.1.2 Field
+///
+/// Example (using the `bitfield::Field` macro):
+///
+/// ```rust
+/// /// Layout:
+/// ///
+/// ///  7       3     0
+/// /// ╔═════╤═╧═╤═════╗
+/// /// ║     │Fld│     ║
+/// /// ║     │   │     ║ BitField
+/// /// ║0 0 0│   │0 0 0║
+/// /// ╚═════╧═══╧═════╝
+/// /// Fld = Field
+/// #[bitfield::bitfield(8)]
+/// struct BitField(#[field(3, 2)] Field);
+///
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     Variant0,
+///     Variant1,
+///     Variant2,
+///     Variant3
+/// }
+/// ```
+///
+/// The names for the accessors described below are `get` and `set`.
+///
+/// ### 1.2.2 Struct with named fields
+///
+/// If a bit field contains more than one field or a combination of fields and flags (or multiple
+/// flag types if one is reused in multiple types for example, see
+/// `example/windows_object_access.rs`), a struct with named fields must be used.
+///
+/// Example:
+///
+/// ```rust
+/// /// Layout:
+/// ///
+/// ///  7       3     0
+/// /// ╔═══════╧═╤═════╗
+/// /// ║--Flags--│Field║
+/// /// ║         │     ║ BitField
+/// /// ║         │     ║
+/// /// ╚═════════╧═════╝
+/// #[bitfield::bitfield(8)]
+/// struct BitField {
+///     #[field(size = 3)] field: Field,
+///     flags: Flag
+/// }
+///
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     Variant0,
+///     Variant1,
+///     Variant2,
+///     Variant3,
+///     Variant4,
+///     Variant5,
+///     Variant6,
+///     Variant7
+/// }
+///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00001000 = 3,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+/// ```
+///
+/// The names for the accessors described below are `field` and `set_field` as well as `flags` and
+/// `set_flags`.
+///
+/// ## 1.3. Bit field entries
+///
+/// As seen above, a bit field can host a combination of multi-bit wide fields and one-bit wide
+/// boolean flags.
+///
+/// ### 1.3.1 Flags
+///
+/// Flags in a bit field must be `#[repr(u8)]` `enum` types. The `bitfield::Flags` proc-macro-derive
+/// macro aids in implementing the necessary traits and methods. Unlike fields, flags can be used in
+/// bit fields without any special attribute, just like a field in a normal `struct` type.
+///
+/// Example:
+///
+/// ```rust
+/// /// Layout:
+/// ///
+/// ///  7       3     0
+/// /// ╔═══════╧═══════╗
+/// /// ║-----Flags-----║
+/// /// ║               ║ BitField
+/// /// ║               ║
+/// /// ╚═══════════════╝
+/// #[bitfield::bitfield(8)]
+/// struct BitField(
+///     // No explicit attribute needed.
+///     Flag
+/// );
+///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00000001,
+///     Flag00000010,
+///     Flag00000100,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+/// ```
+///
+/// ### 1.3.2 Fields
+///
+/// A field in a bit field must be either a C-like `enum` type with a `#[repr(uX)]` attribute, an
+/// unsigned primitive integer type, or a `bool`. A `bool` should only be used in case a separate
+/// flags enum is unnecessary, see `examples/vga_text_mode.rs`, otherwise using a flags enum should
+/// be preferred, as it has advantages like enumerability. For C-like `enum` types, the
+/// `bitfield::Field` proc-macro-derive macro aids in implementing the necessary traits and methods.
+///
+/// Unlike for flags, a `#[field]` attribute must be specified for fields in a bit field.
+///
+/// Example:
+///
+/// ```rust
+/// /// Layout:
+/// ///
+/// ///  7       3     0
+/// /// ╔═════╤═╧═╤═════╗
+/// /// ║     │Fld│     ║
+/// /// ║     │   │     ║ BitField
+/// /// ║0 0 0│   │0 0 0║
+/// /// ╚═════╧═══╧═════╝
+/// /// Fld = Field
+/// #[bitfield::bitfield(8)]
+/// struct BitField(
+///     // Explicit attribute needed.
+///     #[field(3, 2)] Field
+/// );
+///
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     Variant0,
+///     Variant1,
+///     Variant2,
+///     Variant3
+/// }
+/// ```
+///
+/// The position and the size of the field can be specified separately by using one of the following
+/// notations:
+///
+/// - Position: `#[field(bit = VALUE)]` (see `field_01` in the following example)
+/// - Size: `#[field(size = VALUE)]` (see `field_09`)
+/// - Both: `#[field(BIT, SIZE)]` (see `field_14`)
+///
+/// If `bit` is not specified in any way, then the field is placed directly after the previous field
+/// (deduced by its `bit + size`), see `field_09`.
+///
+/// If `size` is not specified in any way for fields of an unsigned primitive integer type or
+/// `bool`, the full amount of necessary bits store the primitive type is used instead, see
+/// `field_01`.
+///
+/// The `#[field]` attribute can be completely omitted for primitive types in the case that no
+/// explicit position should be set and the full primitive type size should be used (see
+/// `field_12`), as is done for the two `bool` fields in `examples/vga_text_mode.rs`.
+///
+/// Example:
+///
+/// ```rust
+/// /// Layout:
+/// ///
+/// ///  15      11      7       3     0
+/// /// ╔═══╤═╤═╪═════╤═╧═══════╧═════╤═╗
+/// /// ║f14│ │f│fld09│----field_01---│ ║
+/// /// ║   │ │1│     │               │ ║ BitField
+/// /// ║   │0│2│     │               │0║
+/// /// ╚═══╧═╧═╧═════╧═══════════════╧═╝
+/// ///         field_01
+/// /// fld09 = field_09
+/// /// f12   = field_12
+/// /// f14   = field_14
+/// #[bitfield::bitfield(16)]
+/// struct BitField {
+///     // Bit 0 is unused.
+///     #[field(bit  = 1)] field_01: u8,   // Field from bit  1 -  8 (implicit size =  8).
+///     #[field(size = 3)] field_09: u8,   // Field from bit  9 - 11 (implicit bit  =  9).
+///                        field_12: bool, // Implicit field 12 - 12 (implicit bit  = 12, size = 1).
+///     // Bit 13 is unused.
+///     #[field(14, 2)]    field_14: Field // Field from bit 14 - 15 (explicit bit and size).
+/// }
+///
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     Variant0,
+///     Variant1,
+///     Variant2,
+///     Variant3
+/// }
+/// ```
+///
+/// ## 1.4. Implementations for the `core::fmt::{Debug, Display}` traits
+///
+/// Implementations for the `core::fmt::{Debug, Display}` traits can be generated by using the
+/// `#[derive]` attribute. In this case the user of this crate needs to add `extern crate alloc;` to
+/// the root of their crate, as the macros in this crate target `core` instead of `std` to generate
+/// `#![no_std]`-compatible code, and formatting strings requires memory allocations.
+///
+/// Example:
+///
+/// ```rust
 /// extern crate alloc;
 ///
-/// bitfield::bit_field!(
-///     pub(crate) Field: u32;
-///     flags:
-///         pub(crate) has + pub(crate) set: Flag;
-///     fields:
-///         // Field spanning bits 8-11.
-///         pub(crate) button + pub(crate) set_button: Button[u8: 8, 4]
-/// );
-///
-/// #[derive(Debug, Eq, PartialEq)]
-/// #[repr(u8)]
-/// pub enum Button {
-///     Ok,
-///     OkCancel,
-///     AbortRetryIgnore,
-///     YesNoCancel,
-///     YesNo,
-///     RetryCancel,
-///     CancelTryContinue
-///     // Value `7` is unused.
+/// #[bitfield::bitfield(8)]
+/// #[derive(Debug)]
+/// struct BitField {
+///     #[field(size = 2)] field: Field,
+///     flags: Flag
 /// }
 ///
-/// impl core::convert::TryFrom<u8> for Button {
+/// #[derive(Clone, Copy, Debug, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     Variant0,
+///     Variant1,
+///     Variant2,
+///     Variant3
+/// }
+///
+/// #[derive(Copy, Clone, Debug, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00000100 = 2,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+/// ```
+///
+/// The implementation for `core::fmt::Display` can only be generated for bit fields with only one
+/// field or flags (typically a tuple struct bit field).
+///
+/// Example for flags:
+///
+/// ```rust
+/// extern crate alloc;
+///
+/// #[bitfield::bitfield(8)]
+/// #[derive(Debug, Display)]
+/// struct BitField(Flag);
+///
+/// #[derive(Copy, Clone, Debug, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00000001,
+///     Flag00000010,
+///     Flag00000100,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+/// ```
+///
+/// Example for a field:
+///
+/// ```rust
+/// extern crate alloc;
+///
+/// #[bitfield::bitfield(8)]
+/// #[derive(Debug, Display)]
+/// struct BitField(#[field(3, 2)] u8);
+/// ```
+///
+/// # 2. Bit field features
+///
+/// The following type definition is generated for a bit field:
+///
+/// ```ignore
+/// #[repr(C)]
+/// struct #NAME(#PRIMITIVE_TYPE);
+/// ```
+///
+/// ## 2.1. Initialization
+///
+/// For initialization purposes the following method is generated:
+///
+/// ```ignore
+/// /// Creates a new instance with all flags and fields cleared.
+/// const fn new() -> Self;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField(bool);
+///
+/// let field = BitField::new();
+/// ```
+///
+/// ## 2.2. Accessors
+///
+/// All methods that change the state of a bit field do not actually change the bit field, but
+/// return a changed copy of it, in a way that it can be constructed with the
+/// [builder pattern](https://doc.rust-lang.org/1.0.0/style/ownership/builders.html). To access
+/// fields and flags the following methods are generated:
+///
+/// ### 2.2.1 Flags
+///
+/// For flags the following accessor methods are generated:
+///
+/// ```ignore
+/// /// Returns `true` if the specified `flag` is set.
+/// const fn #GETTER(&self, flag: #FLAG_TYPE) -> bool;
+///
+/// /// Returns `true` if all flags are set.
+/// const fn #GETTER_all(&self) -> bool;
+///
+/// /// Returns `true` if any flag is set.
+/// const fn #GETTER_any(&self) -> bool;
+///
+/// /// Creates a copy of the bit field with the new value for the specified flag.
+/// const fn #SETTER(&self, flag: #FLAG_TYPE, value: bool) -> Self;
+///
+/// /// Creates a copy of the bit field with all flags set to `true`.
+/// const fn #SETTER_all(&self) -> Self;
+///
+/// /// Creates a copy of the bit field with all flags set to `false`.
+/// const fn #SETTER_none(&self) -> Self;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField(Flag);
+///
+/// #[derive(Copy, Clone, Debug, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00000001,
+///     Flag00000010,
+///     Flag00000100,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+///
+/// let mut field = BitField::new();
+/// assert!(!field.has(Flag::Flag00000001));
+/// assert!(!field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!(!field.has_any());
+///
+/// field = field.set(Flag::Flag00000001, true).set(Flag::Flag00000010, true);
+/// assert!( field.has(Flag::Flag00000001));
+/// assert!( field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!( field.has_any());
+///
+/// field = field.set(Flag::Flag00000001, false);
+/// assert!(!field.has(Flag::Flag00000001));
+/// assert!( field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!( field.has_any());
+///
+/// field = field.set_all();
+/// assert!( field.has(Flag::Flag00000001));
+/// assert!( field.has(Flag::Flag00000010));
+/// assert!( field.has(Flag::Flag00000100));
+/// assert!( field.has_all());
+/// assert!( field.has_any());
+///
+/// field = field.set_none();
+/// assert!(!field.has(Flag::Flag00000001));
+/// assert!(!field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!(!field.has_any());
+/// ```
+///
+/// ### 2.2.2 Fields
+///
+/// For fields the following accessor methods are generated:
+///
+/// #### 2.2.2.1 `bool`
+///
+/// For `bool` fields the following accessor methods are generated:
+///
+/// ```ignore
+/// /// Gets the value of the field.
+/// const fn #GETTER(&self) -> bool;
+///
+/// /// Creates a copy of the bit field with the new value.
+/// const fn #SETTER(&self, value: bool) -> Self;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField(bool);
+///
+/// let mut field = BitField::new();
+/// assert!(!field.get());
+///
+/// field = field.set(true);
+/// assert!( field.get());
+///
+/// field = field.set(false);
+/// assert!(!field.get());
+/// ```
+///
+/// #### 2.2.2.2 Unsigned primitive integer types
+///
+/// For unsigned primitive integer type fields the following accessor methods are generated:
+///
+/// ```ignore
+/// /// Gets the value of the field.
+/// const fn #GETTER(&self) -> #PRIMITIVE_TYPE;
+///
+/// // NOTE: This can be solved with ranged integers when they land:
+/// // https://github.com/rust-lang/rfcs/issues/671.
+/// //
+/// /// Returns `None` if `value` is bigger than the specified amount of
+/// /// bits for the field can store.
+/// const fn #SETTER(&self, value: #PRIMITIVE_TYPE) -> Option<Self>;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField(#[field(size = 3)] u8);
+///
+/// let mut field = BitField::new();
+/// assert_eq!(field.get(), 0);
+///
+/// field = field.set(7).unwrap();
+/// assert_eq!(field.get(), 7);
+///
+/// assert!(field.set(8).is_none());
+/// ```
+///
+/// #### 2.2.2.3 Others
+///
+/// For fields of other types the following accessor methods are generated:
+///
+/// ```ignore
+/// // NOTE: This method is `const` only if the `#![feature(const_trait_impl)]` from
+/// // https://github.com/rust-lang/rust/pull/68847 is used because `core::convert::TryFrom` is
+/// // used under the hood to convert the primitve value to an enumeration variant.
+/// //
+/// /// Returns the primitive value encapsulated in the `Err` variant, if the value can
+/// /// not be converted to the expected type.
+/// (const) fn #GETTER(&self) -> core::result::Result<#FIELD_TYPE, #PRIMITIVE_TYPE>;
+///
+/// /// Creates a copy of the bit field with the new value.
+/// const fn #SETTER(&self, value: #FIELD_TYPE) -> Self;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField(#[field(size = 3)] Field);
+///
+/// #[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     // 0 is unused.
+///     One = 1,
+///     Two,
+///     Three
+/// }
+///
+/// let mut field = BitField::new();
+/// assert_eq!(field.get(), Err(0));
+///
+/// field = field.set(Field::One);
+/// assert_eq!(field.get(), Ok(Field::One));
+#[proc_macro_attribute]
+pub fn bitfield(
+    attribute: proc_macro::TokenStream,
+    item: proc_macro::TokenStream
+) -> proc_macro::TokenStream {
+    bitfield::BitField::parse(attribute.into(), item.into()).map_or_else(
+        |error| error.to_compile_error(),
+        |field| field.into()
+    ).into()
+}
+
+/// Generates all necessary trait implementations and methods for a C-like `enum` type to be used as
+/// a field in the `bitfield::bitfield` macro.
+///
+/// The type must implement `core::clone::Clone` and `core::marker::Copy`.
+///
+/// A `core::convert::TryFrom<#REPR_TYPE>` implementation with `Error = #REPR_TYPE` is generated.
+///
+/// Example:
+///
+/// ```rust
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     Variant1 = 1,
+///     Variant2,
+///     Variant5 = 5
+/// }
+/// ```
+///
+/// Generates:
+///
+/// ```rust
+/// # #[derive(Clone, Copy)]
+/// # #[repr(u8)]
+/// # enum Field {
+/// #     Variant1 = 1,
+/// #     Variant2,
+/// #     Variant5 = 5
+/// # }
+/// impl core::convert::TryFrom<u8> for Field {
 ///     type Error = u8;
 ///
-///     fn try_from(value: u8) -> core::result::Result<Self, Self::Error> {
+///     #[allow(non_upper_case_globals)]
+///     #[inline(always)]
+///     fn try_from(value: u8) -> core::result::Result<
+///         Self, <Self as core::convert::TryFrom<u8>>::Error
+///     > {
+///         const Variant1: u8 = Field::Variant1 as u8;
+///         const Variant2: u8 = Field::Variant2 as u8;
+///         const Variant5: u8 = Field::Variant5 as u8;
+///
 ///         match value {
-///             v if v == Self::Ok                as u8 => Ok(Self::Ok),
-///             v if v == Self::OkCancel          as u8 => Ok(Self::OkCancel),
-///             v if v == Self::AbortRetryIgnore  as u8 => Ok(Self::AbortRetryIgnore),
-///             v if v == Self::YesNoCancel       as u8 => Ok(Self::YesNoCancel),
-///             v if v == Self::YesNo             as u8 => Ok(Self::YesNo),
-///             v if v == Self::RetryCancel       as u8 => Ok(Self::RetryCancel),
-///             v if v == Self::CancelTryContinue as u8 => Ok(Self::CancelTryContinue),
-///             _ => Err(value)
+///             Variant1 | Variant2 | Variant5 => core::result::Result::Ok(unsafe {
+///                 *(&value as *const u8 as *const Self)
+///             }),
+///             _ => core::result::Result::Err(value)
 ///         }
 ///     }
-/// }
+///  }
+/// ```
+#[proc_macro_derive(Field)]
+pub fn field(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    field::Field::parse(item.into())
+        .map(|field| field.into())
+        .unwrap_or_else(|error| error.to_compile_error())
+        .into()
+}
+
+/// Generates all necessary trait implementations and methods for a `#[repr(u8)]` `enum` type to be
+/// used as flags in the `bitfield::bitfield` macro.
 ///
-/// #[derive(Clone, Copy, Debug)]
+/// The type must implement `core::clone::Clone` and `core::marker::Copy`.
+///
+/// The enum variant discriminators must be equal to the bit position the flag is supposed to be at,
+/// not the actual shifted flag:
+///
+/// ```rust
+/// #[derive(Copy, Clone, bitfield::Flags)]
 /// #[repr(u8)]
-/// pub(crate) enum Flag {
-///     F0,
-///     F1,
-///     F2,
-///     FMax = 7
+/// enum CorrectExplicit {
+///     Flag00000001 = 0,
+///     Flag00000010 = 1,
+///     Flag00000100 = 2,
+///     Flag00001000 = 3,
+///     Flag00010000 = 4,
+///     Flag00100000 = 5,
+///     Flag01000000 = 6,
+///     Flag10000000 = 7
 /// }
 ///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum CorrectImplicit {
+///     Flag00000001,
+///     Flag00000010,
+///     Flag00000100,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum IncorrectBinary {
+///     Flag00000001 = 0b00000001,
+///     Flag00000010 = 0b00000010,
+///     Flag00000100 = 0b00000100,
+///     Flag00001000 = 0b00001000,
+///     Flag00010000 = 0b00010000,
+///     Flag00100000 = 0b00100000,
+///     Flag01000000 = 0b01000000,
+///     Flag10000000 = 0b10000000
+/// }
+///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum IncorrectHex {
+///     Flag00000001 = 0x01,
+///     Flag00000010 = 0x02,
+///     Flag00000100 = 0x04,
+///     Flag00001000 = 0x08,
+///     Flag00010000 = 0x10,
+///     Flag00100000 = 0x20,
+///     Flag01000000 = 0x40,
+///     Flag10000000 = 0x80
+/// }
+///
+/// #[derive(Copy, Clone, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum IncorrectShift {
+///     Flag00000001 = 1 << 0,
+///     Flag00000010 = 1 << 1,
+///     Flag00000100 = 1 << 2,
+///     Flag00001000 = 1 << 3,
+///     Flag00010000 = 1 << 4,
+///     Flag00100000 = 1 << 5,
+///     Flag01000000 = 1 << 6,
+///     Flag10000000 = 1 << 7
+/// }
+/// ```
+///
+/// The following methods are generated:
+///
+/// ```ignore
+/// /// Returns an array containing all enumeration variants in the defined order.
+/// const fn iter() -> &'static [Self];
+///
+/// /// Returns the flag with the highest bit value.
+/// const fn max() -> Self;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[derive(Clone, Copy, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag1 = 1,
+///     Flag2,
+///     Flag5 = 5
+/// }
+/// ```
+///
+/// Generates:
+///
+/// ```rust
+/// # #[derive(Clone, Copy)]
+/// # #[repr(u8)]
+/// # enum Flag {
+/// #     Flag1 = 1,
+/// #     Flag2,
+/// #     Flag5 = 5
+/// # }
+/// #
 /// impl Flag {
+///     /// Returns an array containing all enumeration variants in the defined order.
+///     #[inline(always)]
 ///     const fn iter() -> &'static [Self] {
-///         &[Flag::F0, Flag::F1, Flag::F2, Flag::FMax]
+///         &[Flag::Flag1, Flag::Flag2, Flag::Flag5]
+///     }
+///
+///     /// Returns the flag with the highest bit value.
+///     #[inline(always)]
+///     const fn max() -> Self {
+///         let mut i = 0;
+///         let mut max = Flag::Flag1;
+///
+///         while i < Self::iter().len() {
+///             let current = Self::iter()[i];
+///             if current as u8 > max as u8 {
+///                 max = current;
+///             }
+///
+///             i += 1;
+///         }
+///
+///         max
 ///     }
 /// }
-///
-/// // Tests
-///
-/// let mut field = Field::new();
-///
-/// assert!(!field.has(Flag::F2));
-///
-/// field = field.set(Flag::F2, true);
-/// assert!(field.has(Flag::F2));
-///
-/// field = field.set(Flag::FMax, true);
-/// assert!(field.has(Flag::FMax));
-///
-/// assert_eq!(field.button(), Ok(Button::Ok));
-/// field = field.set_button(Button::CancelTryContinue);
-/// assert_eq!(field.button(), Ok(Button::CancelTryContinue));
-///
-/// assert_eq!(
-///     &alloc::format!("{:?}", &field),
-///     "Field { button: Ok(CancelTryContinue), F0: false, F1: false, F2: true, FMax: true }"
-/// );
 /// ```
-#[macro_export]
-macro_rules! bit_field {
-    // Flags only.
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u8;
-        flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
-    ) => {
-        $crate::bit_field!(1
-            $(#[$attr])* $visibility $bit_field : $crate::BitField8, u8;
-            flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u16;
-        flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
-    ) => {
-        $crate::bit_field!(1
-            $(#[$attr])* $visibility $bit_field : $crate::BitField16, u16;
-            flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u32;
-        flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
-    ) => {
-        $crate::bit_field!(1
-            $(#[$attr])* $visibility $bit_field : $crate::BitField32, u32;
-            flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u64;
-        flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
-    ) => {
-        $crate::bit_field!(1
-            $(#[$attr])* $visibility $bit_field : $crate::BitField64, u64;
-            flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u128;
-        flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
-    ) => {
-        $crate::bit_field!(1
-            $(#[$attr])* $visibility $bit_field : $crate::BitField128, u128;
-            flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : usize;
-        flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
-    ) => {
-        $crate::bit_field!(1
-            $(#[$attr])* $visibility $bit_field : $crate::BitFieldSize, usize;
-            flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+
-        );
-    };
-    // Flags and fields.
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u8
-          ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
-        $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField8, u8;
-            flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
-            fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u8
-        $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
-          ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField8, u8;
-            flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
-            fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u16
-          ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
-        $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField16, u16;
-            flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
-            fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u16
-        $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
-          ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField16, u16;
-            flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
-            fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u32
-          ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
-        $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField32, u32;
-            flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
-            fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u32
-        $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
-          ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField32, u32;
-            flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
-            fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u64
-          ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
-        $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField64, u64;
-            flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
-            fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u64
-        $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
-          ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField64, u64;
-            flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
-            fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u128
-          ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
-        $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField128, u128;
-            flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
-            fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : u128
-        $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
-          ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitField128, u128;
-            flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
-            fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : usize
-          ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),+
-        $(; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),* )?
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitFieldSize, usize;
-            flags:    $($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),+;
-            fields: $($($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),*)?
-        );
-    };
-    (
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : usize
-        $(; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),* )?
-          ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),+
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $crate::BitFieldSize, usize;
-            flags: $($($flag_get_visibility  $flag_get  + $flag_set_visibility  $flag_set  : $flag_type),* )?;
-            fields:  $($field_get_visibility $field_get + $field_set_visibility $field_set : $field_type [$field_sub_type : $field_index, $field_size]),+
-        );
-    };
-    // Flags only.
-    (1
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : $bit_field_type:ty, $bit_field_sub_type:ty;
-        flags: $($flag_get_visibility:vis $flag_get:ident + $flag_set_visibility:vis $flag_set:ident : $flag_type:ty),+
-    ) => {
-        $crate::bit_field!(2
-            $(#[$attr])* $visibility $bit_field : $bit_field_type, $bit_field_sub_type;
-            flags: $($flag_get_visibility $flag_get + $flag_set_visibility $flag_set : $flag_type),+;
-            fields:
-        );
-
-        impl core::fmt::Display for $bit_field {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                let mut formatted = alloc::string::String::new();
-
-                $(
-                    for flag in <$flag_type>::iter() {
-                        if self.0.bit(*flag as u8) {
-                            if formatted.len() > 0 {
-                                formatted.push_str(" | ");
-                            }
-                            formatted.push_str(&alloc::format!("{:?}", flag));
-                        }
-                    }
-                )+
-
-                if formatted.len() == 0 {
-                    formatted.push('-');
-                }
-
-                f.write_str(formatted.as_ref())
-            }
-        }
-    };
-    // Flags and fields.
-    (2
-        $(#[$attr:meta])* $visibility:vis $bit_field:ident : $bit_field_type:ty, $bit_field_sub_type:ty
-        ; flags:  $($flag_get_visibility:vis  $flag_get:ident  + $flag_set_visibility:vis  $flag_set:ident  : $flag_type:ty),*
-        ; fields: $($field_get_visibility:vis $field_get:ident + $field_set_visibility:vis $field_set:ident : $field_type:ty [$field_sub_type:ty : $field_index:expr, $field_size:expr]),*
-    ) => {
-        #[repr(C)]
-        $(#[$attr])*
-        $visibility struct $bit_field($bit_field_type);
-
-        impl $bit_field {
-            /// Creates a new instance with all flags set to `false`.
-            #[inline(always)]
-            $visibility const fn new() -> Self {
-                Self(<$bit_field_type>::new())
-            }
-
-            // Generate flag getters and setters.
-            $(
-                /// Returns a boolean value whether the specified flag is set.
-                #[inline(always)]
-                $flag_get_visibility const fn $flag_get(&self, flag: $flag_type) -> bool {
-                    self.0.bit(flag as u8)
-                }
-
-                /// Returns a modified instance with the flag set to the specified value.
-                #[inline(always)]
-                $flag_set_visibility const fn $flag_set(self, flag: $flag_type, value: bool) -> Self {
-                    Self(self.0.set_bit(flag as u8, value))
-                }
-            )*
-
-            // Generate field getters and setters.
-            $(
-                /// Returns the field's value if it is a valid enum variant, or the numeric value otherwise.
-                #[inline(always)]
-                $field_get_visibility fn $field_get(&self) -> core::result::Result<$field_type, $field_sub_type> {
-                    core::convert::TryInto::<$field_type>::try_into(
-                        self.0.field($field_index, $field_size) as $field_sub_type
-                    )
-                }
-
-                /// Returns a modified instance with the field set to the specified value.
-                #[inline(always)]
-                $field_set_visibility const fn $field_set(&self, value: $field_type) -> Self {
-                    Self(self.0.set_field($field_index, $field_size, value as $bit_field_sub_type))
-                }
-            )*
-        }
-
-        impl core::fmt::Debug for $bit_field {
-            fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-                let mut f = f.debug_struct(stringify!($bit_field));
-
-                // Generate field related output fields.
-                $(
-                    f.field(stringify!($field_get), &self.$field_get());
-                )*
-
-                // Generate flag related output fields.
-                $(
-                    for flag in <$flag_type>::iter() {
-                        f.field(&alloc::format!("{:?}", flag), &self.0.bit(*flag as u8));
-                    }
-                )*
-
-                f.finish()
-            }
-        }
-    };
-}
-
-macro_rules! create_bit_field_type {
-    ($name:ident: $int:ident) => {
-        #[repr(C)]
-        #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-        pub struct $name($int);
-
-        impl $name {
-            /// Creates a new instance.
-            #[inline(always)]
-            pub const fn new() -> Self {
-                Self(0)
-            }
-
-            /// Returns the complete internal value.
-            #[inline(always)]
-            pub const fn value(&self) -> $int {
-                self.0
-            }
-
-            /// Returns a boolean value whether the specified flag is set.
-            #[inline(always)]
-            pub const fn bit(&self, position: u8) -> bool {
-                ((self.0 >> position) & 1) != 0
-            }
-
-            /// Returns a modified instance with the flag set to the specified value.
-            #[inline(always)]
-            pub const fn set_bit(&self, position: u8, value: bool) -> Self {
-                let cleared = self.0 & !(1 << position);
-
-                Self(cleared | ((value as $int) << position))
-            }
-
-            /// Returns a field (subset of bits) from the internal value.
-            #[inline(always)]
-            pub const fn field(&self, position: u8, size: u8) -> $int {
-                // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
-                // assert!(size > 0);
-                // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
-                // assert!(position as usize + size as usize <= (core::mem::size_of::<$int>() * 8));
-
-                let shifted = self.0 >> position;
-
-                let rest = size as $int % (core::mem::size_of::<$int>() * 8) as $int;
-                let bit = (rest > 0) as $int;
-
-                let limit = bit.wrapping_shl(rest as u32);
-                let mask = limit.wrapping_sub((size > 0) as $int);
-                let result = shifted & mask;
-
-                result
-            }
-
-            /// Returns a modified variant with the field set to the specified value.
-            #[inline(always)]
-            pub const fn set_field(&self, position: u8, size: u8, value: $int) -> Self {
-                // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
-                // assert!(size > 0);
-                // assert!(size as usize <= (core::mem::size_of::<$int>() * 8));
-                // assert!(position as usize + size as usize <= (core::mem::size_of::<$int>() * 8));
-                // assert!((1 as $int).wrapping_shl(size as u32).wrapping_sub(1) >= value);
-
-                let rest = size as $int % (core::mem::size_of::<$int>() * 8) as $int;
-                let bit = (rest > 0) as $int;
-
-                let limit = bit.wrapping_shl(rest as u32);
-                let negative_mask = limit.wrapping_sub((size > 0) as $int);
-                let positioned_used_bits = negative_mask << position;
-                let positioned_mask = !positioned_used_bits;
-                let cleared = self.0 & positioned_mask;
-
-                let shifted_value = value << position;
-
-                let result = cleared | shifted_value;
-
-                Self(result)
-            }
-        }
-
-        #[cfg(test)]
-        impl core::cmp::PartialEq<$int> for $name {
-            fn eq(&self, other: &$int) -> bool {
-                self.0 == *other
-            }
-        }
-    };
-}
-
-create_bit_field_type!(BitField8: u8);
-create_bit_field_type!(BitField16: u16);
-create_bit_field_type!(BitField32: u32);
-create_bit_field_type!(BitField64: u64);
-create_bit_field_type!(BitField128: u128);
-create_bit_field_type!(BitFieldSize: usize);
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn all_functions() {
-        let mut bf = BitField8::new();
-        assert_eq!(bf, 0b0000_0000);
-        assert_eq!(bf.value(), 0b0000_0000);
-        assert_eq!(bf.field(0, 8), 0b0000_0000);
-        assert_eq!(bf.field(1, 7), 0b000_0000);
-        assert_eq!(bf.field(0, 4), 0b0000);
-        assert_eq!(bf.field(1, 3), 0b000);
-        assert_eq!(bf.field(1, 2), 0b00);
-        assert_eq!(bf.field(2, 2), 0b00);
-        assert!(!bf.bit(0));
-        assert!(!bf.bit(1));
-        assert!(!bf.bit(2));
-        assert!(!bf.bit(3));
-
-        bf = bf.set_bit(1, true);
-        assert_eq!(bf, 0b0000_0010);
-        assert_eq!(bf.value(), 0b0000_0010);
-        assert_eq!(bf.field(0, 8), 0b0000_0010);
-        assert_eq!(bf.field(1, 7), 0b000_0001);
-        assert_eq!(bf.field(0, 4), 0b0010);
-        assert_eq!(bf.field(0, 2), 0b10);
-        assert_eq!(bf.field(1, 2), 0b01);
-        assert!(!bf.bit(0));
-        assert!(bf.bit(1));
-        assert!(!bf.bit(2));
-        assert!(!bf.bit(3));
-
-        bf = bf.set_bit(2, true);
-        assert_eq!(bf, 0b0000_0110);
-        assert_eq!(bf.value(), 0b0000_0110);
-        assert_eq!(bf.field(0, 8), 0b0000_0110);
-        assert_eq!(bf.field(1, 7), 0b000_0011);
-        assert_eq!(bf.field(0, 4), 0b0110);
-        assert_eq!(bf.field(0, 2), 0b10);
-        assert_eq!(bf.field(1, 2), 0b11);
-        assert!(!bf.bit(0));
-        assert!(bf.bit(1));
-        assert!(bf.bit(2));
-        assert!(!bf.bit(3));
-        
-        bf = bf.set_field(4, 4, 0b1111);
-        assert_eq!(bf, 0b1111_0110);
-        assert_eq!(bf.value(), 0b1111_0110);
-        assert_eq!(bf.field(0, 8), 0b1111_0110);
-        assert_eq!(bf.field(1, 7), 0b111_1011);
-
-        bf = BitField8::new().set_field(0, 8, 0b1111_1111);
-        assert_eq!(bf, 0b1111_1111);
-        assert_eq!(bf.value(), 0b1111_1111);
-        assert_eq!(bf.field(0, 8), 0b1111_1111);
-
-        bf = BitField8::new().set_field(1, 7, 0b0111_1111);
-        assert_eq!(bf, 0b1111_1110);
-        assert_eq!(bf.value(), 0b1111_1110);
-        assert_eq!(bf.field(0, 8), 0b1111_1110);
-
-        bf = BitField8::new().set_field(0, 7, 0b0111_1111);
-        assert_eq!(bf, 0b01111_111);
-        assert_eq!(bf.value(), 0b01111_111);
-        assert_eq!(bf.field(0, 8), 0b01111_111);
-    }
-
-    #[test]
-    #[should_panic(expected = "attempt to shift right with overflow")]
-    fn bounds_bit_position() {
-        BitField8::new().bit(8);
-    }
-
-    /*
-    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
-    #[test]
-    #[should_panic(expected = "TODO")]
-    fn bounds_field_zero_size() {
-        BitField8::new().field(7, 0);
-    }
-    */
-
-    #[test]
-    #[should_panic(expected = "attempt to shift right with overflow")]
-    fn bounds_field_position() {
-        BitField8::new().field(8, 1);
-    }
-
-    /*
-    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
-    #[test]
-    #[should_panic(expected = "TODO")]
-    fn bounds_field_size() {
-        BitField8::new().field(0, 9);
-    }
-
-    #[test]
-    #[should_panic(expected = "TODO")]
-    fn bounds_field_combination() {
-        BitField8::new().field(7, 2);
-    }
-    */
-
-    #[test]
-    #[should_panic(expected = "attempt to shift left with overflow")]
-    fn bounds_set_bit_position() {
-        let _ = BitField8::new().set_bit(8, true);
-    }
-
-    /*
-    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
-    #[test]
-    #[should_panic(expected = "TODO")]
-    fn bounds_set_field_zero_size() {
-        let _ = BitField8::new().set_field(7, 0, 0);
-    }
-    */
-
-    #[test]
-    #[should_panic(expected = "attempt to shift left with overflow")]
-    fn bounds_set_field_position() {
-        let _ = BitField8::new().set_field(8, 1, 0);
-    }
-
-    /*
-    // TODO: Wait for https://github.com/rust-lang/rust/issues/51999.
-    #[test]
-    #[should_panic(expected = "TODO")]
-    fn bounds_set_field_size() {
-        let _ = BitField8::new().set_field(0, 9, 0);
-    }
-
-    #[test]
-    #[should_panic(expected = "TODO")]
-    fn bounds_set_field_combination() {
-        let _ = BitField8::new().set_field(7, 2, 0);
-    }
-
-    #[test]
-    #[should_panic(expected = "TODO")]
-    fn bounds_set_field_value() {
-        let _ = BitField8::new().set_field(0, 1, 2);
-    }
-    */
+#[proc_macro_derive(Flags)]
+pub fn flags(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    flags::Flags::parse(item.into())
+        .map(|flags| flags.into())
+        .unwrap_or_else(|error| error.to_compile_error())
+        .into()
 }
