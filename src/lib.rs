@@ -14,6 +14,7 @@ mod bitfield;
 mod enumeration;
 mod field;
 mod flags;
+mod primitive;
 
 /// Generates an abstraction of a primitive type which tightly stores information in a bit field.
 ///
@@ -367,8 +368,8 @@ mod flags;
 ///
 /// ### 1.3.2 Fields
 ///
-/// A field in a bit field must be either a C-like `enum` type with a `#[repr(uX)]` attribute, an
-/// unsigned primitive integer type, or a `bool`. A `bool` should only be used in case a separate
+/// A field in a bit field must be either a C-like `enum` type with a `#[repr(iX/uX)]` attribute, a
+/// primitive integer type, or a `bool`. A `bool` should only be used in case a separate
 /// flags enum is unnecessary, see `examples/vga_text_mode.rs`, otherwise using a flags enum should
 /// be preferred, as it has advantages like enumerability. For C-like `enum` types, the
 /// `bitfield::Field` proc-macro-derive macro aids in implementing the necessary traits and methods.
@@ -677,9 +678,41 @@ mod flags;
 /// assert!(!field.get());
 /// ```
 ///
-/// #### 2.2.2.2 Unsigned primitive integer types
+/// #### 2.2.2.2 Signed primitive integer types
 ///
-/// For unsigned primitive integer type fields the following accessor methods are generated:
+/// Because the highest bit is used to store the sign, signed primitive integer types are only
+/// supported if their full size is used, f. e. `size = 8` for `i8` or `size = 16` for `i16`, etc.
+///
+/// For signed primitive integer type fields the following accessor methods are generated:
+///
+/// ```ignore
+/// /// Gets the value of the field.
+/// const fn #GETTER(&self) -> #PRIMITIVE_TYPE;
+///
+/// /// Creates a copy of the bit field with the new value.
+/// const fn #SETTER(&self, value: #PRIMITIVE_TYPE) -> Self;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(16)]
+/// struct BitField(#[field(bit = 8)] i8);
+///
+/// let mut field = BitField::new();
+/// assert_eq!(field.get(), 0);
+///
+/// field = field.set(7);
+/// assert_eq!(field.get(), 7);
+///
+/// field = field.set(-7);
+/// assert_eq!(field.get(), -7);
+/// ```
+///
+/// #### 2.2.2.3 Unsigned primitive integer types
+///
+/// For unsigned primitive integer type fields which are smaller than their full size, the following
+/// accessor methods are generated:
 ///
 /// ```ignore
 /// /// Gets the value of the field.
@@ -688,6 +721,8 @@ mod flags;
 /// // NOTE: This can be solved with ranged integers when they land:
 /// // https://github.com/rust-lang/rfcs/issues/671.
 /// //
+/// /// Creates a copy of the bit field with the new value.
+/// ///
 /// /// Returns `None` if `value` is bigger than the specified amount of
 /// /// bits for the field can store.
 /// const fn #SETTER(&self, value: #PRIMITIVE_TYPE) -> Option<Self>;
@@ -708,9 +743,34 @@ mod flags;
 /// assert!(field.set(8).is_none());
 /// ```
 ///
-/// #### 2.2.2.3 Others
+/// A "signed primitive integer types"-like implementation is generated, which does not return a
+/// `core::result::Result` from the setter, if the full size of the integer is used:
 ///
-/// For fields of other types the following accessor methods are generated:
+/// ```ignore
+/// /// Gets the value of the field.
+/// const fn #GETTER(&self) -> #PRIMITIVE_TYPE;
+///
+/// /// Creates a copy of the bit field with the new value.
+/// const fn #SETTER(&self, value: #PRIMITIVE_TYPE) -> Self; // No `Option<Self>` here.
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(16)]
+/// struct BitField(#[field(size = 8)] u8);
+///
+/// let mut field = BitField::new();
+/// assert_eq!(field.get(), 0);
+///
+/// field = field.set(8);
+/// assert_eq!(field.get(), 8);
+/// ```
+///
+/// #### 2.2.2.4 Unsigned enumerations
+///
+/// For fields of enumerations with an unsigned primitive integer representation, the following
+/// accessor methods are generated:
 ///
 /// ```ignore
 /// // NOTE: This method is `const` only if the `#![feature(const_trait_impl)]` from
@@ -719,11 +779,18 @@ mod flags;
 /// //
 /// /// Returns the primitive value encapsulated in the `Err` variant, if the value can
 /// /// not be converted to the expected type.
-/// (const) fn #GETTER(&self) -> core::result::Result<#FIELD_TYPE, #PRIMITIVE_TYPE>;
+/// (const) fn #GETTER(&self) -> core::result::Result<#FIELD_TYPE, #UNSIGNED_PRIMITIVE_TYPE>;
 ///
 /// /// Creates a copy of the bit field with the new value.
 /// const fn #SETTER(&self, value: #FIELD_TYPE) -> Self;
 /// ```
+///
+/// The getter tries to convert the primitive integer type to an enumeration variant by executing
+/// `core::convert::TryFrom<#UNSIGNED_PRIMITIVE_TYPE>::try_into(BITS_REPRESENTING_THE_FIELD)` where
+/// `#UNSIGNED_PRIMITIVE_TYPE` is the smallest possible primitive integer type that can store the
+/// field value, based on the `size` value in the `#[field]` attribute, f. e. `u8` for
+/// `#[field(size = 1)]` to `#[field(size = 8)]`, or `u16` for `#[field(size = 9)]` to
+/// `#[field(size = 16)]`, etc.
 ///
 /// Example:
 ///
@@ -745,6 +812,56 @@ mod flags;
 ///
 /// field = field.set(Field::One);
 /// assert_eq!(field.get(), Ok(Field::One));
+/// ```
+///
+/// #### 2.2.2.5 Signed enumerations
+///
+/// Because the highest bit is used to store the sign, fields of enumerations with a signed
+/// primitive integer representation are only supported if their full size is used, f. e. `size = 8`
+/// for `i8` or `size = 16` for `i16`, etc.
+///
+/// They are generally handled like fields of enumerations with an unsigned primitive integer type,
+/// except that the `signed` keyword must be added in the `#[field]` attribute, which will cause the
+/// following accessor methods to be generated:
+///
+/// ```ignore
+/// // NOTE: This method is `const` only if the `#![feature(const_trait_impl)]` from
+/// // https://github.com/rust-lang/rust/pull/68847 is used because `core::convert::TryFrom` is
+/// // used under the hood to convert the primitve value to an enumeration variant.
+/// //
+/// /// Returns the primitive value encapsulated in the `Err` variant, if the value can
+/// /// not be converted to the expected type.
+/// (const) fn #GETTER(&self) -> core::result::Result<#FIELD_TYPE, #SIGNED_PRIMITIVE_TYPE>;
+///
+/// /// Creates a copy of the bit field with the new value.
+/// const fn #SETTER(&self, value: #FIELD_TYPE) -> Self;
+/// ```
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(16)]
+/// struct BitField(#[field(size = 8, signed)] Field);
+///
+/// #[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
+/// #[repr(i8)]
+/// enum Field {
+///     MinusOne = -1,
+///     // 0 is unused.
+///     One = 1,
+///     Two,
+///     Three
+/// }
+///
+/// let mut field = BitField::new();
+/// assert_eq!(field.get(), Err(0));
+///
+/// field = field.set(Field::MinusOne);
+/// assert_eq!(field.get(), Ok(Field::MinusOne));
+///
+/// field = field.set(Field::One);
+/// assert_eq!(field.get(), Ok(Field::One));
+/// ```
 #[proc_macro_attribute]
 pub fn bitfield(
     attribute: proc_macro::TokenStream,
@@ -761,6 +878,13 @@ pub fn bitfield(
 ///
 /// The type must implement `core::clone::Clone` and `core::marker::Copy`.
 ///
+/// The following methods are generated:
+///
+/// ```ignore
+/// /// Returns true if the enumeration is represented by a signed primitive type.
+/// const fn is_signed() -> bool;
+/// ```
+///
 /// A `core::convert::TryFrom<#REPR_TYPE>` implementation with `Error = #REPR_TYPE` is generated.
 ///
 /// Example:
@@ -768,10 +892,17 @@ pub fn bitfield(
 /// ```rust
 /// #[derive(Clone, Copy, bitfield::Field)]
 /// #[repr(u8)]
-/// enum Field {
+/// enum UnsignedField {
 ///     Variant1 = 1,
 ///     Variant2,
 ///     Variant5 = 5
+/// }
+///
+/// #[derive(Clone, Copy, bitfield::Field)]
+/// #[repr(i8)]
+/// enum SignedField {
+///     VariantMinus1 = -1,
+///     Variant1 = 1
 /// }
 /// ```
 ///
@@ -780,12 +911,26 @@ pub fn bitfield(
 /// ```rust
 /// # #[derive(Clone, Copy)]
 /// # #[repr(u8)]
-/// # enum Field {
+/// # enum UnsignedField {
 /// #     Variant1 = 1,
 /// #     Variant2,
 /// #     Variant5 = 5
 /// # }
-/// impl core::convert::TryFrom<u8> for Field {
+/// # #[derive(Clone, Copy)]
+/// # #[repr(i8)]
+/// # enum SignedField {
+/// #     VariantMinus1 = -1,
+/// #     Variant1 = 1
+/// # }
+/// impl UnsignedField {
+///     /// Returns true if the enumeration is represented by a signed primitive type.
+///     #[inline(always)]
+///     const fn is_signed() -> bool {
+///         false
+///     }
+/// }
+///
+/// impl core::convert::TryFrom<u8> for UnsignedField {
 ///     type Error = u8;
 ///
 ///     #[allow(non_upper_case_globals)]
@@ -793,9 +938,9 @@ pub fn bitfield(
 ///     fn try_from(value: u8) -> core::result::Result<
 ///         Self, <Self as core::convert::TryFrom<u8>>::Error
 ///     > {
-///         const Variant1: u8 = Field::Variant1 as u8;
-///         const Variant2: u8 = Field::Variant2 as u8;
-///         const Variant5: u8 = Field::Variant5 as u8;
+///         const Variant1: u8 = UnsignedField::Variant1 as u8;
+///         const Variant2: u8 = UnsignedField::Variant2 as u8;
+///         const Variant5: u8 = UnsignedField::Variant5 as u8;
 ///
 ///         match value {
 ///             Variant1 | Variant2 | Variant5 => core::result::Result::Ok(unsafe {
@@ -804,7 +949,35 @@ pub fn bitfield(
 ///             _ => core::result::Result::Err(value)
 ///         }
 ///     }
-///  }
+/// }
+///
+/// impl SignedField {
+///     /// Returns true if the enumeration is represented by a signed primitive type.
+///     #[inline(always)]
+///     const fn is_signed() -> bool {
+///         true
+///     }
+/// }
+///
+/// impl core::convert::TryFrom<i8> for SignedField {
+///     type Error = i8;
+///
+///     #[allow(non_upper_case_globals)]
+///     #[inline(always)]
+///     fn try_from(value: i8) -> core::result::Result<
+///         Self, <Self as core::convert::TryFrom<i8>>::Error
+///     > {
+///         const VariantMinus1: i8 = SignedField::VariantMinus1 as i8;
+///         const Variant1: i8 = SignedField::Variant1 as i8;
+///
+///         match value {
+///             VariantMinus1 | Variant1 => core::result::Result::Ok(unsafe {
+///                 *(&value as *const i8 as *const Self)
+///             }),
+///             _ => core::result::Result::Err(value)
+///         }
+///     }
+/// }
 /// ```
 #[proc_macro_derive(Field)]
 pub fn field(item: proc_macro::TokenStream) -> proc_macro::TokenStream {

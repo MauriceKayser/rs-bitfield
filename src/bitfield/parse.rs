@@ -158,14 +158,9 @@ impl super::BitField {
             let mut bit = 0u8;
 
             for entry in bitfield.data.entries_mut() {
-                let primitive_size: Option<u8> =
-                    if entry.ty.is_ident("bool") { Some(1) }
-                    else if entry.ty.is_ident("u8") { Some(8) }
-                    else if entry.ty.is_ident("u16") { Some(16) }
-                    else if entry.ty.is_ident("u32") { Some(32) }
-                    else if entry.ty.is_ident("u64") { Some(64) }
-                    else if entry.ty.is_ident("u128") { Some(128) }
-                    else { None };
+                let primitive_size = entry.ty.get_ident().map(
+                    |ident| crate::primitive::primitive_bits(ident)
+                ).flatten();
 
                 if let Some(field) = &mut entry.field {
                     // Handle optional `size`.
@@ -199,7 +194,8 @@ impl super::BitField {
                         bit: Some(syn::LitInt::new(&bit.to_string(), entry.ty.span())),
                         size: Some(syn::LitInt::new(
                             &format!("{}", primitive_size), entry.ty.span()
-                        ))
+                        )),
+                        signed: None
                     });
                     bit += primitive_size;
                 }
@@ -270,51 +266,60 @@ impl super::BitField {
 
                     // Special handling for primitive types.
                     if let Some(ty) = entry.ty.get_ident() {
-                        let ty_str = ty.to_string();
+                        if crate::primitive::is_bool(ty) {
+                            if size != 1 {
+                                return Err(syn::Error::new(ty.span(), format!(
+                                    "type is smaller than the specified size of {} bits", size
+                                )));
+                            }
+                            if let Some(signed) = &field.signed {
+                                return Err(syn::Error::new(
+                                    signed.span(), "unnecessary attribute for `bool`"
+                                ));
+                            }
+                        } else if
+                            crate::primitive::is_signed_primitive(ty) ||
+                            crate::primitive::is_unsigned_primitive(ty)
+                        {
+                            let field_size = crate::primitive::primitive_bits(ty).unwrap();
 
-                        match ty_str.as_ref() {
-                            "i8" | "i16" | "i32" | "i64" | "i128" => return Err(syn::Error::new(
-                                ty.span(), format!(
-                                    "fields can never be negative, use `u{}` instead", &ty_str[1..]
-                                )
-                            )),
+                            if field_size < size {
+                                return Err(syn::Error::new(ty.span(), format!(
+                                    "type is smaller than the specified size of {} bits", size
+                                )));
+                            }
 
-                            "bool" => {
-                                if size != 1 {
+                            if field_size != size && crate::primitive::is_signed_primitive(ty) {
+                                return Err(syn::Error::new(
+                                    ty.span(), format!(
+                                        "a signed `{}` with a size of `{}` bits can not store negative numbers, use either `u{}` or `#[field(size = {})]`",
+                                        ty, size, field_size, field_size
+                                    )
+                                ));
+                            }
+
+                            if let Some(bits) = bits {
+                                if field_size > bits {
                                     return Err(syn::Error::new(ty.span(), format!(
-                                        "type is smaller than the specified size of {} bits", size
+                                        "bigger than the size of the bit field, use `u{}` instead",
+                                        bits
                                     )));
                                 }
-                            },
+                            }
 
-                            "u8" | "u16" | "u32" | "u64" | "u128" => {
-                                let field_size = ty_str[1..].parse::<u8>().unwrap();
-
-                                if let Some(bits) = bits {
-                                    if field_size > bits {
-                                        return Err(syn::Error::new(ty.span(), format!(
-                                            "bigger than the size of the bit field, use `u{}` instead",
-                                            bits
-                                        )));
-                                    }
-                                }
-
-                                if field_size < size {
+                            for s in &[8u8, 16, 32, 64, 128] {
+                                if field_size > *s && size <= *s {
                                     return Err(syn::Error::new(ty.span(), format!(
-                                        "type is smaller than the specified size of {} bits", size
+                                        "field only uses {} bits, use `u{}` instead", size, *s
                                     )));
                                 }
+                            }
 
-                                for s in &[8u8, 16, 32, 64, 128] {
-                                    if field_size > *s && size <= *s {
-                                        return Err(syn::Error::new(ty.span(), format!(
-                                            "field only uses {} bits, use `u{}` instead", size, *s
-                                        )));
-                                    }
-                                }
-                            },
-
-                            _ => ()
+                            if let Some(signed) = &field.signed {
+                                return Err(syn::Error::new(signed.span(), format!(
+                                    "unnecessary attribute for `{}`", ty
+                                )));
+                            }
                         }
                     }
                 }
@@ -445,6 +450,21 @@ impl syn::parse::Parse for super::EntryNamed {
 
 impl syn::parse::Parse for super::FieldDetails {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        fn parse_signed(buffer: &syn::parse::ParseBuffer) -> syn::Result<Option<syn::Ident>> {
+            if buffer.peek(syn::Token![,]) && buffer.peek2(syn::Ident) {
+                buffer.parse::<syn::Token![,]>()?;
+
+                let ident: syn::Ident = buffer.parse()?;
+
+                return if ident == "signed" {
+                    Ok(Some(ident))
+                } else {
+                    Err(syn::Error::new(ident.span(), "did you mean `signed`?"))
+                };
+            }
+            Ok(None)
+        }
+
         fn validate_bit(bit: &syn::LitInt) -> syn::Result<()> {
             if !bit.base10_parse::<u8>().is_err() {
                 Ok(())
@@ -452,6 +472,7 @@ impl syn::parse::Parse for super::FieldDetails {
                 Err(syn::Error::new(bit.span(), "expected a number between 0-255"))
             }
         }
+
         fn validate_size(size: &syn::LitInt) -> syn::Result<()> {
             if !size.base10_parse::<core::num::NonZeroU8>().is_err() {
                 Ok(())
@@ -462,17 +483,22 @@ impl syn::parse::Parse for super::FieldDetails {
 
         let buffer = syn::group::parse_parens(input)?.content;
 
-        // Parse `bit = LitInt` or `size = LitInt`.
+        // Parse `bit = LitInt, signed?` or `size = LitInt, signed?`.
         if let Ok(ident) = buffer.parse::<syn::Ident>() {
             buffer.parse::<syn::Token![=]>()?;
             let value: syn::LitInt = buffer.parse()?;
+            let signed = parse_signed(&buffer)?;
+
+            if !buffer.is_empty() {
+                return Err(buffer.error("unexpected token"));
+            }
 
             return if ident == "bit" {
                 validate_bit(&value)?;
-                Ok(Self { span: value.span(), bit: Some(value), size: None })
+                Ok(Self { span: value.span(), bit: Some(value), size: None, signed })
             } else if ident == "size" {
                 validate_size(&value)?;
-                Ok(Self { span: value.span(), bit: None, size: Some(value) })
+                Ok(Self { span: value.span(), bit: None, size: Some(value), signed })
             } else {
                 Err(syn::Error::new(ident.span(), "expected `bit` or `size`"))
             };
@@ -487,13 +513,15 @@ impl syn::parse::Parse for super::FieldDetails {
         let size: syn::LitInt = buffer.parse()?;
         validate_size(&size)?;
 
+        let signed = parse_signed(&buffer)?;
+
         if !buffer.is_empty() {
             return Err(buffer.error("unexpected token"));
         }
 
         let span = bit.span().join(size.span()).unwrap();
 
-        Ok(Self { span, bit: Some(bit), size: Some(size) })
+        Ok(Self { span, bit: Some(bit), size: Some(size), signed })
     }
 }
 
@@ -746,13 +774,22 @@ pub(super) mod tests {
         }
 
         assert_field!(parse_valid!("8", "struct A(#[field(bit = 2)] bool);").data, 0, 2, 1);
+        assert_field!(parse_valid!("16", "struct A(#[field(bit = 2)] i8);").data, 0, 2, 8);
         assert_field!(parse_valid!("16", "struct A(#[field(bit = 2)] u8);").data, 0, 2, 8);
+        assert_field!(parse_valid!("32", "struct A(#[field(bit = 2)] i16);").data, 0, 2, 16);
         assert_field!(parse_valid!("32", "struct A(#[field(bit = 2)] u16);").data, 0, 2, 16);
+        assert_field!(parse_valid!("64", "struct A(#[field(bit = 2)] i32);").data, 0, 2, 32);
         assert_field!(parse_valid!("64", "struct A(#[field(bit = 2)] u32);").data, 0, 2, 32);
+        assert_field!(parse_valid!("128", "struct A(#[field(bit = 2)] i64);").data, 0, 2, 64);
         assert_field!(parse_valid!("128", "struct A(#[field(bit = 2)] u64);").data, 0, 2, 64);
         parse_invalid!(
             "128", "struct A(#[field(bit = 0)] u128);",
             "field has the size of the whole bit field, use a plain `u128` instead",
+            (1, 27), (1, 31)
+        );
+        parse_invalid!(
+            "128", "struct A(#[field(bit = 0)] i128);",
+            "field has the size of the whole bit field, use a plain `i128` instead",
             (1, 27), (1, 31)
         );
         parse_invalid!(
@@ -1020,11 +1057,66 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn field_details_empty() {
+    fn field_details_signed() {
+        assert!(match parse_valid!("8", "struct A(#[field(size = 2)] A);").data {
+            Data::Tuple(entry) => {
+                entry.field.unwrap().signed.is_none()
+            },
+            _ => false
+        });
+
+        assert!(match parse_valid!("8", "struct A(#[field(size = 2, signed)] A);").data {
+            Data::Tuple(entry) => {
+                entry.field.unwrap().signed.is_some()
+            },
+            _ => false
+        });
+
+        assert!(match parse_valid!("8", "struct A(#[field(1, 2)] A);").data {
+            Data::Tuple(entry) => {
+                entry.field.unwrap().signed.is_none()
+            },
+            _ => false
+        });
+
+        assert!(match parse_valid!("8", "struct A(#[field(1, 2, signed)] A);").data {
+            Data::Tuple(entry) => {
+                entry.field.unwrap().signed.is_some()
+            },
+            _ => false
+        });
+    }
+
+    #[test]
+    fn field_details_extra_tokens() {
         parse_invalid!(
             "8", "struct A(#[field(1, 2, 3)] B);",
             "unexpected token",
             (1, 21), (1, 22)
+        );
+
+        parse_invalid!(
+            "8", "struct A(#[field(bit = 1, 2)] B);",
+            "unexpected token",
+            (1, 24), (1, 25)
+        );
+
+        parse_invalid!(
+            "8", "struct A(#[field(bit = 1, signed, X)] B);",
+            "unexpected token",
+            (1, 32), (1, 33)
+        );
+
+        parse_invalid!(
+            "8", "struct A(#[field(size = 1, 2)] B);",
+            "unexpected token",
+            (1, 25), (1, 26)
+        );
+
+        parse_invalid!(
+            "8", "struct A(#[field(bit = 1, signed, X)] B);",
+            "unexpected token",
+            (1, 32), (1, 33)
         );
     }
 
@@ -1401,42 +1493,84 @@ pub(super) mod tests {
     #[test]
     fn validate_primitive_signed() {
         parse_invalid!(
-            "8", "struct A(#[field(1, 7)] i8);",
-            "fields can never be negative, use `u8` instead",
+            "16", "struct A(#[field(0, 9)] i8);",
+            "type is smaller than the specified size of 9 bits",
             (1, 24), (1, 26)
         );
+
+        parse_invalid!(
+            "8", "struct A(#[field(1, 7)] i8);",
+            "a signed `i8` with a size of `7` bits can not store negative numbers, use either `u8` or `#[field(size = 8)]`",
+            (1, 24), (1, 26)
+        );
+
+        parse_valid!("16", "struct A(#[field(0, 8)] i8);");
 
         parse_valid!("8", "struct A(#[field(1, 7)] u8);");
 
         parse_invalid!(
-            "16", "struct A(#[field(1, 15)] i16);",
-            "fields can never be negative, use `u16` instead",
+            "32", "struct A(#[field(0, 17)] i16);",
+            "type is smaller than the specified size of 17 bits",
             (1, 25), (1, 28)
         );
+
+        parse_invalid!(
+            "16", "struct A(#[field(1, 15)] i16);",
+            "a signed `i16` with a size of `15` bits can not store negative numbers, use either `u16` or `#[field(size = 16)]`",
+            (1, 25), (1, 28)
+        );
+
+        parse_valid!("32", "struct A(#[field(0, 16)] i16);");
 
         parse_valid!("16", "struct A(#[field(1, 15)] u16);");
 
         parse_invalid!(
-            "32", "struct A(#[field(1, 31)] i32);",
-            "fields can never be negative, use `u32` instead",
+            "64", "struct A(#[field(0, 33)] i32);",
+            "type is smaller than the specified size of 33 bits",
             (1, 25), (1, 28)
         );
+
+        parse_invalid!(
+            "32", "struct A(#[field(1, 31)] i32);",
+            "a signed `i32` with a size of `31` bits can not store negative numbers, use either `u32` or `#[field(size = 32)]`",
+            (1, 25), (1, 28)
+        );
+
+        parse_valid!("64", "struct A(#[field(0, 32)] i32);");
 
         parse_valid!("32", "struct A(#[field(1, 31)] u32);");
 
         parse_invalid!(
-            "64", "struct A(#[field(1, 63)] i64);",
-            "fields can never be negative, use `u64` instead",
+            "128", "struct A(#[field(0, 65)] i64);",
+            "type is smaller than the specified size of 65 bits",
             (1, 25), (1, 28)
         );
 
+        parse_invalid!(
+            "64", "struct A(#[field(1, 63)] i64);",
+            "a signed `i64` with a size of `63` bits can not store negative numbers, use either `u64` or `#[field(size = 64)]`",
+            (1, 25), (1, 28)
+        );
+
+        parse_valid!("128", "struct A(#[field(0, 64)] i64);");
+
         parse_valid!("64", "struct A(#[field(1, 63)] u64);");
+
+        /* Not possible:
+        parse_invalid!(
+            "256", "struct A(#[field(0, 129)] i128);",
+            "type is smaller than the specified size of 129 bits",
+            (1, 26), (1, 30)
+        );
+        */
 
         parse_invalid!(
             "128", "struct A(#[field(1, 127)] i128);",
-            "fields can never be negative, use `u128` instead",
+            "a signed `i128` with a size of `127` bits can not store negative numbers, use either `u128` or `#[field(size = 128)]`",
             (1, 26), (1, 30)
         );
+
+        // Not possible: parse_valid!("256", "struct A(#[field(0, 128)] i128);");
 
         parse_valid!("128", "struct A(#[field(1, 127)] u128);");
     }

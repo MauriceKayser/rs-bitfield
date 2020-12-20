@@ -76,5 +76,6 @@ struct FieldDetails {
     /// This must never be `None` after parsing.
     bit: Option<syn::LitInt>,
     /// This must never be `None` after parsing.
-    size: Option<syn::LitInt>
+    size: Option<syn::LitInt>,
+    signed: Option<syn::Ident>
 }

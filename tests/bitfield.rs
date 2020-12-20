@@ -11,6 +11,19 @@ enum Field {
     F3
 }
 
+/// When used as a field in a bit field, the field can only contain one of the enum variants.
+/// Variants can only be represented in 8 bits, as the highest bit is used for the sign.
+#[derive(Clone, Copy, Debug, bitfield::Field)]
+#[repr(i8)]
+enum FieldSigned {
+    FMinus128 = -128,
+    FMinus1 = -1,
+    F1 = 1,
+    F2,
+    F3,
+    F127 = 127
+}
+
 /// When used as flags in a bit field, the flags can contain any amount of the enum variants.
 /// All variants can be represented in 2 bits, but the variant which maps to the flag `1 << 2` is
 /// non-existent, so this bit (flag) can not be accessed via this enum (f. e. deprecated operating
@@ -80,7 +93,7 @@ mod tests {
         #[derive(Debug)]
         struct BitField { #[field(3, 2)] field: Field };
 
-        // Default value which maps to `0`, which is non-existent in `TestField`.
+        // Default value which maps to `0`, which is non-existent in `Field`.
         let mut field = BitField::new();
         assert_print_eq!(field, "{:?}", 0, "BitField { field: Err(0) }");
 
@@ -293,7 +306,7 @@ mod tests {
         #[derive(Debug)]
         struct BitField(#[field(3, 2)] Field);
 
-        // Default value which maps to `0`, which is non-existent in `TestField`.
+        // Default value which maps to `0`, which is non-existent in `Field`.
         let mut field = BitField::new();
         assert_print_eq!(field, "{:?}", 0, "BitField { Field: Err(0) }");
 
@@ -313,6 +326,86 @@ mod tests {
         // Unpacked F3, not `Ok(F3)`.
         field = field.set(Field::F3);
         assert_print_eq!(field, "{:?}", 3 << 3, "BitField { Field: F3 }");
+    }
+
+    #[test]
+    fn debug_tuple_field_signed() {
+        #[bitfield::bitfield(16)]
+        #[derive(Debug)]
+        struct BitField(#[field(3, 8)] i8);
+
+        // Default value which maps to `0`, which is non-existent in `FieldSigned`.
+        let mut field = BitField::new();
+        assert_print_eq!(field, "{:?}", 0, "BitField { i8: 0 }");
+
+        // Still default value, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.set(-128); }
+        assert_print_eq!(field, "{:?}", 0, "BitField { i8: 0 }");
+
+        // 0b1000_0000.
+        field = field.set(-128);
+        assert_print_eq!(field, "{:?}", (-128i8 as u8 as u16) << 3, "BitField { i8: -128 }");
+
+        // 0b1111_1111.
+        field = field.set(-1);
+        assert_print_eq!(field, "{:?}", (-1i8 as u8 as u16) << 3, "BitField { i8: -1 }");
+
+        // 0b0000_0001.
+        field = field.set(1);
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { i8: 1 }");
+
+        // 0b0000_0010.
+        field = field.set(2);
+        assert_print_eq!(field, "{:?}", 2 << 3, "BitField { i8: 2 }");
+
+        // 0b0000_0011.
+        field = field.set(3);
+        assert_print_eq!(field, "{:?}", 3 << 3, "BitField { i8: 3 }");
+
+        // 0b0111_1111.
+        field = field.set(127);
+        assert_print_eq!(field, "{:?}", 127 << 3, "BitField { i8: 127 }");
+    }
+
+    #[test]
+    fn debug_tuple_field_signed_enum() {
+        #[bitfield::bitfield(16)]
+        #[derive(Debug)]
+        struct BitField(#[field(3, 8, signed)] FieldSigned);
+
+        // Default value which maps to `0`, which is non-existent in `FieldSigned`.
+        let mut field = BitField::new();
+        assert_print_eq!(field, "{:?}", 0, "BitField { FieldSigned: Err(0) }");
+
+        // Still default value, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.set(FieldSigned::FMinus128); }
+        assert_print_eq!(field, "{:?}", 0, "BitField { FieldSigned: Err(0) }");
+
+        // Unpacked FMinus128, not `Ok(FMinus128)`.
+        field = field.set(FieldSigned::FMinus128);
+        assert_print_eq!(field, "{:?}", (-128i8 as u8 as u16) << 3, "BitField { FieldSigned: FMinus128 }");
+
+        // Unpacked FMinus1, not `Ok(FMinus1)`.
+        field = field.set(FieldSigned::FMinus1);
+        assert_print_eq!(field, "{:?}", (-1i8 as u8 as u16) << 3, "BitField { FieldSigned: FMinus1 }");
+
+        // Unpacked F1, not `Ok(F1)`.
+        field = field.set(FieldSigned::F1);
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { FieldSigned: F1 }");
+
+        // Unpacked F2, not `Ok(F2)`.
+        field = field.set(FieldSigned::F2);
+        assert_print_eq!(field, "{:?}", 2 << 3, "BitField { FieldSigned: F2 }");
+
+        // Unpacked F3, not `Ok(F3)`.
+        field = field.set(FieldSigned::F3);
+        assert_print_eq!(field, "{:?}", 3 << 3, "BitField { FieldSigned: F3 }");
+
+        // Unpacked F127, not `Ok(F127)`.
+        field = field.set(FieldSigned::F127);
+        assert_print_eq!(field, "{:?}", 127 << 3, "BitField { FieldSigned: F127 }");
     }
 
     #[test]
@@ -405,12 +498,12 @@ mod tests {
         { field.set(3); }
         assert_print_eq!(field, "{:?}", 0, "BitField { u8: 0 }");
 
-        // Unpacked 3, not `Ok(3)`.
-        field = field.set(3).unwrap();
+        // 3.
+        field = field.set(3);
         assert_print_eq!(field, "{:?}", 3 << 0, "BitField { u8: 3 }");
 
-        // Unpacked 0, not `Ok(0)`.
-        field = field.set(0).unwrap();
+        // 0.
+        field = field.set(0);
         assert_print_eq!(field, "{:?}", 0, "BitField { u8: 0 }");
     }
 
@@ -733,12 +826,12 @@ mod tests {
         { field.set(3); }
         assert_print_eq!(field, "{}", 0, "0");
 
-        // Unpacked 3, not `Ok(3)`.
-        field = field.set(3).unwrap();
+        // 3.
+        field = field.set(3);
         assert_print_eq!(field, "{}", 3 << 0, "3");
 
-        // Unpacked 0, not `Ok(0)`.
-        field = field.set(0).unwrap();
+        // 0.
+        field = field.set(0);
         assert_print_eq!(field, "{}", 0, "0");
     }
 
@@ -865,23 +958,23 @@ mod tests {
         trybuild::TestCases::new().compile_fail("tests/ui/bitfield/*.rs");
 
         #[cfg(target_pointer_width = "8")]
-            trybuild::TestCases::new().compile_fail(
+        trybuild::TestCases::new().compile_fail(
             "tests/ui/bitfield/architecture/field_uses_whole_bit_field_8.rs"
         );
         #[cfg(target_pointer_width = "16")]
-            trybuild::TestCases::new().compile_fail(
+        trybuild::TestCases::new().compile_fail(
             "tests/ui/bitfield/architecture/field_uses_whole_bit_field_16.rs"
         );
         #[cfg(target_pointer_width = "32")]
-            trybuild::TestCases::new().compile_fail(
+        trybuild::TestCases::new().compile_fail(
             "tests/ui/bitfield/architecture/field_uses_whole_bit_field_32.rs"
         );
         #[cfg(target_pointer_width = "64")]
-            trybuild::TestCases::new().compile_fail(
+        trybuild::TestCases::new().compile_fail(
             "tests/ui/bitfield/architecture/field_uses_whole_bit_field_64.rs"
         );
         #[cfg(target_pointer_width = "128")]
-            trybuild::TestCases::new().compile_fail(
+        trybuild::TestCases::new().compile_fail(
             "tests/ui/bitfield/architecture/field_uses_whole_bit_field_128.rs"
         );
     }

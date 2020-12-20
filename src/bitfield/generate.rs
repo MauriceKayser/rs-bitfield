@@ -31,36 +31,56 @@ impl super::BitField {
             let bit = field.bit.as_ref().unwrap().base10_parse::<u8>().unwrap();
             let size = field.size.as_ref().unwrap().base10_parse::<u8>().unwrap();
 
+            // Conversion for signed fields.
+            let primitive_size = super::BitField::field_primitive_size(size);
+            let conversion = if field.signed.is_some() || ty.get_ident().map(
+                |ident| crate::primitive::is_signed_primitive(ident)
+            ).unwrap_or_default() {
+                quote::ToTokens::to_token_stream(&syn::parse_str::<syn::Expr>(
+                    &format!("u{} as {}", primitive_size, ty_size)
+                ).unwrap())
+            } else { quote::quote! { #ty_size } };
+
             // Special handling for primitive types.
             if let Some(ty) = ty.get_ident() {
-                match ty.to_string().as_ref() {
-                    "bool" => {
-                        return quote::quote! {
-                            #(#attrs)*
-                            /// Gets the value of the field.
-                            #[inline(always)]
-                            #vis const fn #getter(&self) -> #ty {
-                                self._bit(#bit)
-                            }
-
-                            #(#attrs)*
-                            /// Creates a copy of the bit field with the new value.
-                            #[inline(always)]
-                            #[must_use = "leaves `self` unmodified and returns a modified variant"]
-                            #vis const fn #setter(&self, value: #ty) -> Self {
-                                self._set_bit(#bit, value)
-                            }
+                if crate::primitive::is_bool(ty) {
+                    return quote::quote! {
+                        #(#attrs)*
+                        /// Gets the value of the field.
+                        #[inline(always)]
+                        #vis const fn #getter(&self) -> #ty {
+                            self._bit(#bit)
                         }
-                    },
 
-                    "u8" | "u16" | "u32" | "u64" | "u128" => {
-                        let check = if ty.to_string()[1..].parse::<u8>().unwrap() != size {
-                            quote::quote! {
-                                if value >= (1 as #ty).wrapping_shl(#size as u32) { return None; }
-                            }
-                        } else { proc_macro2::TokenStream::new() };
+                        #(#attrs)*
+                        /// Creates a copy of the bit field with the new value.
+                        #[inline(always)]
+                        #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                        #vis const fn #setter(&self, value: #ty) -> Self {
+                            self._set_bit(#bit, value)
+                        }
+                    };
+                } else if crate::primitive::is_signed_primitive(ty) {
+                    return quote::quote! {
+                        #(#attrs)*
+                        /// Gets the value of the field.
+                        #[inline(always)]
+                        #vis const fn #getter(&self) -> #ty {
+                            self._field(#bit, #size) as #ty
+                        }
 
-                        return quote::quote! {
+                        #(#attrs)*
+                        /// Creates a copy of the bit field with the new value.
+                        #[inline(always)]
+                        #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                        #vis const fn #setter(&self, value: #ty) -> Self {
+                            self._set_field(#bit, #size, value as #conversion)
+                        }
+                    };
+                } else if crate::primitive::is_unsigned_primitive(ty) {
+                    return if crate::primitive::primitive_bits(ty).unwrap() != size {
+                        // Fields with a size < bits_of(FieldPrimitive).
+                        quote::quote! {
                             #(#attrs)*
                             /// Gets the value of the field.
                             #[inline(always)]
@@ -70,19 +90,39 @@ impl super::BitField {
 
                             // TODO: Use ranged integers when they land: https://github.com/rust-lang/rfcs/issues/671.
                             #(#attrs)*
+                            /// Creates a copy of the bit field with the new value.
+                            ///
                             /// Returns `None` if `value` is bigger than the specified amount of
                             /// bits for the field can store.
                             #[inline(always)]
                             #[must_use = "leaves `self` unmodified and returns a modified variant"]
                             #vis const fn #setter(&self, value: #ty) -> Option<Self> {
-                                #check
+                                if value >= (1 as #ty).wrapping_shl(#size as u32) {
+                                    return None;
+                                }
 
                                 Some(self._set_field(#bit, #size, value as #ty_size))
                             }
-                        };
-                    },
+                        }
+                    } else {
+                        // Fields with a size == bits_of(FieldPrimitive).
+                        quote::quote! {
+                            #(#attrs)*
+                            /// Gets the value of the field.
+                            #[inline(always)]
+                            #vis const fn #getter(&self) -> #ty {
+                                self._field(#bit, #size) as #ty
+                            }
 
-                    _ => ()
+                            #(#attrs)*
+                            /// Creates a copy of the bit field with the new value.
+                            #[inline(always)]
+                            #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                            #vis const fn #setter(&self, value: #ty) -> Self {
+                                self._set_field(#bit, #size, value as #ty_size)
+                            }
+                        }
+                    }
                 }
             }
 
@@ -90,8 +130,10 @@ impl super::BitField {
 
             // Generate the minimal primitive type the field needs.
             let primitive = syn::Ident::new(
-                &format!("u{}", super::BitField::field_primitive_size(size)),
-                field.size.span()
+                &format!("{}{}",
+                    if field.signed.is_none() { 'u' } else { 'i' },
+                    primitive_size
+                ), field.size.span()
             );
 
             quote::quote! {
@@ -120,7 +162,7 @@ impl super::BitField {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 #vis const fn #setter(&self, value: #ty) -> Self {
-                    self._set_field(#bit, #size, value as #ty_size)
+                    self._set_field(#bit, #size, value as #conversion)
                 }
             }
         } else {
@@ -330,10 +372,31 @@ impl super::BitField {
                     !{ const ASSERT: bool = core::mem::size_of::<#ty>() * 8 >= #size; ASSERT }
                 });
 
+                // Only generate this check for non-primitive types.
+                let signed_size_assertion = ty.get_ident()
+                    .map(|ident| !crate::primitive::is_primitive(ident))
+                    .unwrap_or_default()
+                    .then(|| {
+                        // If `FieldType` is signed, the `field.size` must be exactly `bits_of(FieldType)`.
+                        Some(generate_assertion(&syn::Ident::new(&format!(
+                            "_SIGNED_TYPE_IN_FIELD_{}_CAN_NEVER_BE_NEGATIVE", i
+                        ), size.span()), quote::quote! {
+                            !{
+                                const ASSERT: bool =
+                                    !#ty::is_signed() || core::mem::size_of::<#ty>() * 8 == #size;
+                                ASSERT
+                            }
+                        }))
+                    }).unwrap_or_default();
+
                 // Only generate the next assertions if this can not be checked in the parsing phase,
                 // aka. when the primitive base type is `usize`.
                 if self.attr.bits.is_some() {
-                    return field_assertion;
+                    return quote::quote! {
+                        #field_assertion
+
+                        #signed_size_assertion
+                    }
                 }
 
                 // `bits_of(BitField)` must not be < `bits_of(Field) + size_of(Field)`.
@@ -358,6 +421,8 @@ impl super::BitField {
 
                 quote::quote! {
                     #field_assertion
+
+                    #signed_size_assertion
 
                     #size_assertion
 
@@ -497,13 +562,12 @@ impl super::BitField {
     fn generate_print_field(
         entry: &super::Entry, getter: &syn::Ident, print: proc_macro2::TokenStream
     ) -> proc_macro2::TokenStream {
-        entry.ty.get_ident().and_then(|ty| match ty.to_string().as_ref() {
-            "bool" | "u8" | "u16" | "u32" | "u64" | "u128" => Some(quote::quote! {
+        entry.ty.get_ident().and_then(|ty| crate::primitive::is_primitive(ty).then(
+            || quote::quote! {
                 let value = self.#getter();
                 #print
-            }),
-            _ => None
-        }).unwrap_or_else(|| quote::quote! {
+            }
+        )).unwrap_or_else(|| quote::quote! {
             let value = self.#getter();
             if let core::result::Result::Ok(value) = value {
                 #print
@@ -1243,6 +1307,8 @@ mod tests {
                 self._field(3u8, 2u8) as u8
             }
 
+            /// Creates a copy of the bit field with the new value.
+            ///
             /// Returns `None` if `value` is bigger than the specified amount of
             /// bits for the field can store.
             #[inline(always)]
@@ -1261,14 +1327,104 @@ mod tests {
                 self._field(3u8, 8u8) as u8
             }
 
-            /// Returns `None` if `value` is bigger than the specified amount of
-            /// bits for the field can store.
+            /// Creates a copy of the bit field with the new value.
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
-            const fn test_set(&self, value: u8) -> Option<Self> {
-                Some(self._set_field(3u8, 8u8, value as u16))
+            const fn test_set(&self, value: u8) -> Self {
+                self._set_field(3u8, 8u8, value as u16)
             }
         });
+    }
+
+    #[test]
+    fn accessor_signed() {
+        assert_accessor!(
+            "32", "struct A(#[field(0, 8)] A);", quote::quote! {
+                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
+                /// not be converted to the expected type.
+                #[inline(always)]
+                #[cfg(const_trait_impl)]
+                const fn test_get(&self) -> core::result::Result<A, u8> {
+                    core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
+                }
+
+                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
+                /// not be converted to the expected type.
+                #[inline(always)]
+                #[cfg(not(const_trait_impl))]
+                fn test_get(&self) -> core::result::Result<A, u8> {
+                    core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
+                }
+
+                /// Creates a copy of the bit field with the new value.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn test_set(&self, value: A) -> Self {
+                    self._set_field(0u8, 8u8, value as u32)
+                }
+            }
+        );
+
+        assert_accessor!(
+            "32", "struct A(#[field(0, 8, signed)] A);", quote::quote! {
+                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
+                /// not be converted to the expected type.
+                #[inline(always)]
+                #[cfg(const_trait_impl)]
+                const fn test_get(&self) -> core::result::Result<A, i8> {
+                    core::convert::TryFrom::try_from(self._field(0u8, 8u8) as i8)
+                }
+
+                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
+                /// not be converted to the expected type.
+                #[inline(always)]
+                #[cfg(not(const_trait_impl))]
+                fn test_get(&self) -> core::result::Result<A, i8> {
+                    core::convert::TryFrom::try_from(self._field(0u8, 8u8) as i8)
+                }
+
+                /// Creates a copy of the bit field with the new value.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn test_set(&self, value: A) -> Self {
+                    self._set_field(0u8, 8u8, value as u8 as u32)
+                }
+            }
+        );
+
+        assert_accessor!(
+            "32", "struct A(u8);", quote::quote! {
+                /// Gets the value of the field.
+                #[inline(always)]
+                const fn test_get(&self) -> u8 {
+                    self._field(0u8, 8u8) as u8
+                }
+
+                /// Creates a copy of the bit field with the new value.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn test_set(&self, value: u8) -> Self {
+                    self._set_field(0u8, 8u8, value as u32)
+                }
+            }
+        );
+
+        assert_accessor!(
+            "32", "struct A(i8);", quote::quote! {
+                /// Gets the value of the field.
+                #[inline(always)]
+                const fn test_get(&self) -> i8 {
+                    self._field(0u8, 8u8) as i8
+                }
+
+                /// Creates a copy of the bit field with the new value.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn test_set(&self, value: i8) -> Self {
+                    self._set_field(0u8, 8u8, value as u8 as u32)
+                }
+            }
+        );
     }
 
     #[test]
@@ -1534,6 +1690,8 @@ mod tests {
                     self._field(0u8, 1u8) as u8
                 }
 
+                /// Creates a copy of the bit field with the new value.
+                ///
                 /// Returns `None` if `value` is bigger than the specified amount of
                 /// bits for the field can store.
                 #[inline(always)]
@@ -1554,6 +1712,8 @@ mod tests {
                     self._field(0u8, 1u8) as u8
                 }
 
+                /// Creates a copy of the bit field with the new value.
+                ///
                 /// Returns `None` if `value` is bigger than the specified amount of
                 /// bits for the field can store.
                 #[inline(always)]
@@ -1840,6 +2000,11 @@ mod tests {
                     const ASSERT: bool = core::mem::size_of::<B>() * 8 >= 9;
                     ASSERT
                 } as usize] = [];
+
+                const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [(); 0 - !{
+                    const ASSERT: bool = !B::is_signed() || core::mem::size_of::<B>() * 8 == 9;
+                    ASSERT
+                } as usize] = [];
             }
         };
         assert_compare!(generate_assertions, "16", "struct A(#[field(0, 9)] B);", check_1);
@@ -1866,6 +2031,11 @@ mod tests {
         let check_3 = quote::quote! {
             const _TYPE_IN_FIELD_0_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_2_BITS: [(); 0 - !{
                 const ASSERT: bool = core::mem::size_of::<B>() * 8 >= 2;
+                ASSERT
+            } as usize] = [];
+
+            const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [(); 0 - !{
+                const ASSERT: bool = !B::is_signed() || core::mem::size_of::<B>() * 8 == 2;
                 ASSERT
             } as usize] = [];
 
@@ -1992,6 +2162,11 @@ mod tests {
                 impl A {
                     const _TYPE_IN_FIELD_0_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_3_BITS: [(); 0 - !{
                         const ASSERT: bool = core::mem::size_of::<B>() * 8 >= 3;
+                        ASSERT
+                    } as usize] = [];
+
+                    const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [(); 0 - !{
+                        const ASSERT: bool = !B::is_signed() || core::mem::size_of::<B>() * 8 == 3;
                         ASSERT
                     } as usize] = [];
 
@@ -2802,6 +2977,11 @@ mod tests {
 
                     const _TYPE_IN_FIELD_1_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_3_BITS: [(); 0 - !{
                         const ASSERT: bool = core::mem::size_of::<C>() * 8 >= 3; ASSERT
+                    } as usize] = [];
+
+                    const _SIGNED_TYPE_IN_FIELD_1_CAN_NEVER_BE_NEGATIVE: [(); 0 - !{
+                        const ASSERT: bool = !C::is_signed() || core::mem::size_of::<C>() * 8 == 3;
+                        ASSERT
                     } as usize] = [];
 
                     const _FLAGS_IN_FIELD_2_MUST_BE_REPR_U8: [(); 0 - !{

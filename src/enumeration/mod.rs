@@ -1,5 +1,6 @@
 #[macro_use]
 pub(crate) mod parse;
+pub(crate) mod generate;
 
 /// Stores all necessary information about a C-like enumeration from a `derive` perspective.
 pub(crate) struct Enumeration {

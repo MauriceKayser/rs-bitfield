@@ -1,28 +1,19 @@
 //! Contains code to generate bit field fields.
 
 impl super::Field {
-    /// Generates a `core::convert::TryFrom<REPR, Error = REPR>` implementation.
-    fn generate_try_from(&self) -> proc_macro2::TokenStream {
+    /// Generates a `const fn is_signed() -> bool` implementation.
+    fn generate_is_signed(&self) -> proc_macro2::TokenStream {
+        let is_signed = crate::primitive::is_signed_primitive(&self.0.repr);
+
         let ident = &self.0.ident;
-        let repr = &self.0.repr;
-        let variants = &self.0.variants;
+        let vis = &self.0.vis;
 
         quote::quote!(
-            impl core::convert::TryFrom<#repr> for #ident {
-                type Error = #repr;
-
-                #[allow(non_upper_case_globals)]
+            impl #ident {
+                /// Returns true if the enumeration is represented by a signed primitive type.
                 #[inline(always)]
-                fn try_from(value: #repr) -> core::result::Result<
-                    Self, <Self as core::convert::TryFrom<#repr>>::Error
-                > {
-                    #(const #variants: #repr = #ident::#variants as #repr;)*
-                    match value {
-                        #(#variants)|* => core::result::Result::Ok(unsafe {
-                            *(&value as *const #repr as *const Self)
-                        }),
-                        _ => core::result::Result::Err(value)
-                    }
+                #vis const fn is_signed() -> bool {
+                    #is_signed
                 }
             }
         )
@@ -32,9 +23,11 @@ impl super::Field {
 /// Generates the user code for the parsed field of a bit field.
 impl core::convert::Into<proc_macro2::TokenStream> for super::Field {
     fn into(self) -> proc_macro2::TokenStream {
-        let try_from = self.generate_try_from();
+        let is_signed = self.generate_is_signed();
+        let try_from = self.0.generate_try_from();
 
         quote::quote! {
+            #is_signed
             #try_from
         }
     }
@@ -58,73 +51,39 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_assert_compare() {
-        assert_compare!(generate_try_from, "#[repr(u8)] enum A { B }", quote::quote! {});
+        assert_compare!(generate_is_signed, "#[repr(u8)] enum A { B }", quote::quote! {});
     }
 
     // Test generation.
 
     #[test]
-    fn try_from() {
-        assert_compare!(generate_try_from, "#[repr(u8)] enum A { B }", quote::quote! {
-            impl core::convert::TryFrom<u8> for A {
-                type Error = u8;
-
-                #[allow(non_upper_case_globals)]
+    fn is_signed() {
+        assert_compare!(generate_is_signed, "#[repr(u8)] enum A { B }", quote::quote! {
+            impl A {
+                /// Returns true if the enumeration is represented by a signed primitive type.
                 #[inline(always)]
-                fn try_from(value: u8) -> core::result::Result<
-                    Self, <Self as core::convert::TryFrom<u8>>::Error
-                > {
-                    const B: u8 = A::B as u8;
-
-                    match value {
-                        B => core::result::Result::Ok(unsafe {
-                            *(&value as *const u8 as *const Self)
-                        }),
-                        _ => core::result::Result::Err(value)
-                    }
+                const fn is_signed() -> bool {
+                    false
                 }
             }
         });
 
-        assert_compare!(generate_try_from, "#[repr(u16)] enum B { A }", quote::quote! {
-            impl core::convert::TryFrom<u16> for B {
-                type Error = u16;
-
-                #[allow(non_upper_case_globals)]
+        assert_compare!(generate_is_signed, "#[repr(u8)] pub enum A { B }", quote::quote! {
+            impl A {
+                /// Returns true if the enumeration is represented by a signed primitive type.
                 #[inline(always)]
-                fn try_from(value: u16) -> core::result::Result<
-                    Self, <Self as core::convert::TryFrom<u16>>::Error
-                > {
-                    const A: u16 = B::A as u16;
-
-                    match value {
-                        A => core::result::Result::Ok(unsafe {
-                            *(&value as *const u16 as *const Self)
-                        }),
-                        _ => core::result::Result::Err(value)
-                    }
+                pub const fn is_signed() -> bool {
+                    false
                 }
             }
         });
 
-        assert_compare!(generate_try_from, "#[repr(u8)] enum A { B = 3, C }", quote::quote! {
-            impl core::convert::TryFrom<u8> for A {
-                type Error = u8;
-
-                #[allow(non_upper_case_globals)]
+        assert_compare!(generate_is_signed, "#[repr(i8)] enum A { B }", quote::quote! {
+            impl A {
+                /// Returns true if the enumeration is represented by a signed primitive type.
                 #[inline(always)]
-                fn try_from(value: u8) -> core::result::Result<
-                    Self, <Self as core::convert::TryFrom<u8>>::Error
-                > {
-                    const B: u8 = A::B as u8;
-                    const C: u8 = A::C as u8;
-
-                    match value {
-                        B | C => core::result::Result::Ok(unsafe {
-                            *(&value as *const u8 as *const Self)
-                        }),
-                        _ => core::result::Result::Err(value)
-                    }
+                const fn is_signed() -> bool {
+                    true
                 }
             }
         });
@@ -137,6 +96,14 @@ mod tests {
                 Field(parse_valid!("#[repr(u8)] enum C { D }"))
             ).to_string(),
             quote::quote! {
+                impl C {
+                    /// Returns true if the enumeration is represented by a signed primitive type.
+                    #[inline(always)]
+                    const fn is_signed() -> bool {
+                        false
+                    }
+                }
+
                 impl core::convert::TryFrom<u8> for C {
                     type Error = u8;
 

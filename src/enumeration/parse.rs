@@ -24,7 +24,7 @@ impl super::Enumeration {
             ))
         }?;
 
-        if repr != "u8" && repr != "u16" && repr != "u32" && repr != "u64" && repr != "u128" {
+        if !crate::primitive::is_numeric_primitive(&repr) {
             return Err(syn::Error::new(
                 repr.span(), "expected numerical representation"
             ));
@@ -157,10 +157,15 @@ mod tests {
             (1, 7), (1, 9)
         );
 
+        assert_eq!(parse_valid!("#[repr(i8)] enum A { B }").repr, "i8");
         assert_eq!(parse_valid!("#[repr(u8)] enum A { B }").repr, "u8");
+        assert_eq!(parse_valid!("#[repr(i16)] enum A { B }").repr, "i16");
         assert_eq!(parse_valid!("#[repr(u16)] enum A { B }").repr, "u16");
+        assert_eq!(parse_valid!("#[repr(i32)] enum A { B }").repr, "i32");
         assert_eq!(parse_valid!("#[repr(u32)] enum A { B }").repr, "u32");
+        assert_eq!(parse_valid!("#[repr(i64)] enum A { B }").repr, "i64");
         assert_eq!(parse_valid!("#[repr(u64)] enum A { B }").repr, "u64");
+        assert_eq!(parse_valid!("#[repr(i128)] enum A { B }").repr, "i128");
         assert_eq!(parse_valid!("#[repr(u128)] enum A { B }").repr, "u128");
     }
 
