@@ -7,6 +7,7 @@ impl super::Enumeration {
         let repr = &self.repr;
         let variants = &self.variants;
 
+        // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
         quote::quote!(
             impl core::convert::TryFrom<#repr> for #ident {
                 type Error = #repr;

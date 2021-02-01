@@ -47,17 +47,7 @@ struct Protection {
 
 // Getters for specific access flags.
 impl Protection {
-    #[cfg(const_trait_impl)]
-    const fn copy_on_write(&self) -> bool {
-        match self.access() {
-            Ok(Access::ReadWriteCopy) |
-            Ok(Access::ExecuteReadWriteCopy) => true,
-            _ => false
-        }
-    }
-
-    // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
-    #[cfg(not(const_trait_impl))]
+    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
     fn copy_on_write(&self) -> bool {
         match self.access() {
             Ok(Access::ReadWriteCopy) |
@@ -66,19 +56,7 @@ impl Protection {
         }
     }
 
-    #[cfg(const_trait_impl)]
-    const fn execute(&self) -> bool {
-        match self.access() {
-            Ok(Access::Execute) |
-            Ok(Access::ExecuteRead) |
-            Ok(Access::ExecuteReadWrite) |
-            Ok(Access::ExecuteReadWriteCopy) => true,
-            _ => false
-        }
-    }
-
-    // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
-    #[cfg(not(const_trait_impl))]
+    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
     fn execute(&self) -> bool {
         match self.access() {
             Ok(Access::Execute) |
@@ -89,23 +67,7 @@ impl Protection {
         }
     }
 
-    #[cfg(const_trait_impl)]
-    const fn read(&self) -> bool {
-        match self.access() {
-            Ok(Access::Read) |
-            Ok(Access::ReadWrite) |
-            Ok(Access::ReadWriteCopy) |
-            Ok(Access::ExecuteRead) |
-            Ok(Access::ExecuteReadWrite) |
-            Ok(Access::ExecuteReadWriteCopy) => true,
-            #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-            Ok(Access::Execute) => true,
-            _ => false
-        }
-    }
-
-    // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
-    #[cfg(not(const_trait_impl))]
+    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
     fn read(&self) -> bool {
         match self.access() {
             Ok(Access::Read) |
@@ -120,19 +82,7 @@ impl Protection {
         }
     }
 
-    #[cfg(const_trait_impl)]
-    const fn write(&self) -> bool {
-        match self.access() {
-            Ok(Access::ReadWrite) |
-            Ok(Access::ReadWriteCopy) |
-            Ok(Access::ExecuteReadWrite) |
-            Ok(Access::ExecuteReadWriteCopy) => true,
-            _ => false
-        }
-    }
-
-    // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
-    #[cfg(not(const_trait_impl))]
+    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
     fn write(&self) -> bool {
         match self.access() {
             Ok(Access::ReadWrite) |
@@ -198,10 +148,10 @@ enum FlagUnknown {
 
 fn main() {
     let protection = Protection::new()
-        .set_access(Access::ExecuteReadWrite)
-        .set_flag(Flag::Guard, true)
-        .set_flag(Flag::NoCache, true)
-        .set_flag_alloc(FlagAlloc::TargetsInvalid, true);
+        + Access::ExecuteReadWrite   // Same as: `.set_access(Access::ExecuteReadWrite)`
+        + Flag::Guard                // Same as: `.set_flag(Flag::Guard, true)`
+        + Flag::NoCache              // Same as: `.set_flag(Flag::NoCache, true)`
+        + FlagAlloc::TargetsInvalid; // Same as: `.set_flag_alloc(FlagAlloc::TargetsInvalid, true)`
 
     assert_eq!(
         protection.0,

@@ -101,18 +101,18 @@ fn main() {
         reserved1: 0 as _, reserved2: 0 as _,
 
         flags: Flags::new()
+            + Flag::DoEncode   // Same as: `.set_flag(Flag::DoEncode, true)`
+            + Flag::IsWritable // Same as: `.set_flag(Flag::IsWritable, true)`
     };
 
-    // Check and update flags.
-    channel.flags = channel.flags
-        .set(Flag::DoEncode, true)
-        .set(Flag::IsWritable, true);
-
-    if !channel.flags.has(Flag::CloseOnUnref) {
-        channel.flags = channel.flags.set(Flag::CloseOnUnref, true);
+    // Check and update flag.
+    if channel.flags.has(Flag::DoEncode) {
+        channel.flags -= Flag::DoEncode; // Same as: `.set_flag(Flag::DoEncode, false)`
     }
+    // Invert flag.
+    channel.flags ^= Flag::CloseOnUnref; // Same as: `.invert_flag(Flag::CloseOnUnref)`
 
-    assert_eq!(&format!("{}", &channel.flags), "DoEncode | CloseOnUnref | IsWritable");
+    assert_eq!(&format!("{}", &channel.flags), "CloseOnUnref | IsWritable");
 
     println!("Flags: {}", &channel.flags);
 }

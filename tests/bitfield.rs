@@ -91,7 +91,7 @@ mod tests {
     fn debug_named_field() {
         #[bitfield::bitfield(8)]
         #[derive(Debug)]
-        struct BitField { #[field(3, 2)] field: Field };
+        struct BitField { #[field(3, 2)] field: Field }
 
         // Default value which maps to `0`, which is non-existent in `Field`.
         let mut field = BitField::new();
@@ -116,6 +116,57 @@ mod tests {
     }
 
     #[test]
+    fn debug_named_field_ops() {
+        #[bitfield::bitfield(8)]
+        #[derive(Clone, Copy, Debug)]
+        struct BitField { #[field(3, 2)] field: Field }
+
+        // Default value which maps to `0`, which is non-existent in `Field`.
+        let mut field = BitField::new();
+        assert_print_eq!(field, "{:?}", 0, "BitField { field: Err(0) }");
+
+        // Still default value, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field + Field::F1; }
+        assert_print_eq!(field, "{:?}", 0, "BitField { field: Err(0) }");
+
+        // Unpacked F1, not `Ok(F1)`.
+        field = field + Field::F1;
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { field: F1 }");
+
+        // Unpacked F2, not `Ok(F2)`.
+        field = field + Field::F2;
+        assert_print_eq!(field, "{:?}", 2 << 3, "BitField { field: F2 }");
+
+        // Unpacked F3, not `Ok(F3)`.
+        field = field + Field::F3;
+        assert_print_eq!(field, "{:?}", 3 << 3, "BitField { field: F3 }");
+    }
+
+    #[test]
+    fn debug_named_field_ops_assign() {
+        #[bitfield::bitfield(8)]
+        #[derive(Debug)]
+        struct BitField { #[field(3, 2)] field: Field }
+
+        // Default value which maps to `0`, which is non-existent in `Field`.
+        let mut field = BitField::new();
+        assert_print_eq!(field, "{:?}", 0, "BitField { field: Err(0) }");
+
+        // Unpacked F1, not `Ok(F1)`.
+        field += Field::F1;
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { field: F1 }");
+
+        // Unpacked F2, not `Ok(F2)`.
+        field += Field::F2;
+        assert_print_eq!(field, "{:?}", 2 << 3, "BitField { field: F2 }");
+
+        // Unpacked F3, not `Ok(F3)`.
+        field += Field::F3;
+        assert_print_eq!(field, "{:?}", 3 << 3, "BitField { field: F3 }");
+    }
+
+    #[test]
     fn debug_named_flags_multi() {
         #[bitfield::bitfield(8)]
         #[derive(Debug)]
@@ -136,6 +187,16 @@ mod tests {
         // Still no flags set, as the modified result is not stored.
         #[allow(unused_must_use)]
         { field.set_flags2(Flags2::G4, true); }
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: false, G7: false } }");
+
+        // Still no flags set, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.invert_flags(Flags::F0); }
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: false, G7: false } }");
+
+        // Still no flags set, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.invert_flags2(Flags2::G4); }
         assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: false, G7: false } }");
 
         // One flag set.
@@ -168,6 +229,22 @@ mod tests {
 
         // No flags set.
         field = field.set_flags2(Flags2::G7, false);
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: false, G7: false } }");
+
+        // Invert a flag.
+        field = field.invert_flags(Flags::F0);
+        assert_print_eq!(field, "{:?}", 1 << 0, "BitField { flags: Flags { F0: true, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: false, G7: false } }");
+
+        // Invert a flag.
+        field = field.invert_flags2(Flags2::G5);
+        assert_print_eq!(field, "{:?}", 1 << 0 | 1 << 5, "BitField { flags: Flags { F0: true, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: true, G7: false } }");
+
+        // Invert a flag.
+        field = field.invert_flags(Flags::F0);
+        assert_print_eq!(field, "{:?}", 1 << 5, "BitField { flags: Flags { F0: false, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: true, G7: false } }");
+
+        // Invert a flag.
+        field = field.invert_flags2(Flags2::G5);
         assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false }, flags2: Flags2 { G4: false, G5: false, G7: false } }");
     }
 
@@ -210,6 +287,101 @@ mod tests {
 
         // No flags set.
         field = field.set_flags(Flags::F3, false);
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
+    }
+
+    #[test]
+    fn debug_named_field_single_ops() {
+        #[bitfield::bitfield(8)]
+        #[derive(Clone, Copy, Debug)]
+        struct BitField {
+            flags: Flags
+        }
+
+        // No flags set.
+        let mut field = BitField::new();
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
+
+        // Still no flags set, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field + Flags::F0; }
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
+
+        // One flag set.
+        field = field + Flags::F0;
+        assert_print_eq!(field, "{:?}", 1 << 0, "BitField { flags: Flags { F0: true, F1: false, F3: false } }");
+
+        // Two flags set.
+        field = field + Flags::F1;
+        assert_print_eq!(field, "{:?}", 1 << 0 | 1 << 1, "BitField { flags: Flags { F0: true, F1: true, F3: false } }");
+
+        // Three flags set.
+        field = field + Flags::F3;
+        assert_print_eq!(field, "{:?}", 1 << 0 | 1 << 1 | 1 << 3, "BitField { flags: Flags { F0: true, F1: true, F3: true } }");
+
+        // Two flags set.
+        field = field - Flags::F0;
+        assert_print_eq!(field, "{:?}", 1 << 1 | 1 << 3, "BitField { flags: Flags { F0: false, F1: true, F3: true } }");
+
+        // One flag set.
+        field = field - Flags::F1;
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { flags: Flags { F0: false, F1: false, F3: true } }");
+
+        // No flags set.
+        field = field - Flags::F3;
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
+
+        // Invert flag.
+        field = field ^ Flags::F3;
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { flags: Flags { F0: false, F1: false, F3: true } }");
+
+        // Invert flag.
+        field = field ^ Flags::F3;
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
+    }
+
+    #[test]
+    fn debug_named_field_single_ops_assign() {
+        #[bitfield::bitfield(8)]
+        #[derive(Debug)]
+        struct BitField {
+            flags: Flags
+        }
+
+        // No flags set.
+        let mut field = BitField::new();
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
+
+        // One flag set.
+        field += Flags::F0;
+        assert_print_eq!(field, "{:?}", 1 << 0, "BitField { flags: Flags { F0: true, F1: false, F3: false } }");
+
+        // Two flags set.
+        field += Flags::F1;
+        assert_print_eq!(field, "{:?}", 1 << 0 | 1 << 1, "BitField { flags: Flags { F0: true, F1: true, F3: false } }");
+
+        // Three flags set.
+        field += Flags::F3;
+        assert_print_eq!(field, "{:?}", 1 << 0 | 1 << 1 | 1 << 3, "BitField { flags: Flags { F0: true, F1: true, F3: true } }");
+
+        // Two flags set.
+        field -= Flags::F0;
+        assert_print_eq!(field, "{:?}", 1 << 1 | 1 << 3, "BitField { flags: Flags { F0: false, F1: true, F3: true } }");
+
+        // One flag set.
+        field -= Flags::F1;
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { flags: Flags { F0: false, F1: false, F3: true } }");
+
+        // No flags set.
+        field = field - Flags::F3;
+        assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
+
+        // Invert flag.
+        field ^= Flags::F3;
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { flags: Flags { F0: false, F1: false, F3: true } }");
+
+        // Invert flag.
+        field ^= Flags::F3;
         assert_print_eq!(field, "{:?}", 0, "BitField { flags: Flags { F0: false, F1: false, F3: false } }");
     }
 
@@ -522,6 +694,11 @@ mod tests {
         { field.set(Flags::F0, true); }
         assert_print_eq!(field, "{:?}", 0, "BitField { F0: false, F1: false, F3: false }");
 
+        // Still no flags set, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.invert(Flags::F0); }
+        assert_print_eq!(field, "{:?}", 0, "BitField { F0: false, F1: false, F3: false }");
+
         // One flag set.
         field = field.set(Flags::F0, true);
         assert_print_eq!(field, "{:?}", 1 << 0, "BitField { F0: true, F1: false, F3: false }");
@@ -545,13 +722,21 @@ mod tests {
         // No flags set.
         field = field.set(Flags::F3, false);
         assert_print_eq!(field, "{:?}", 0, "BitField { F0: false, F1: false, F3: false }");
+
+        // Invert a flag.
+        field = field.invert(Flags::F3);
+        assert_print_eq!(field, "{:?}", 1 << 3, "BitField { F0: false, F1: false, F3: true }");
+
+        // Invert a flag.
+        field = field.invert(Flags::F3);
+        assert_print_eq!(field, "{:?}", 0, "BitField { F0: false, F1: false, F3: false }");
     }
 
     #[test]
     fn display_named_field() {
         #[bitfield::bitfield(8)]
         #[derive(Display)]
-        struct BitField { #[field(3, 2)] field: Field };
+        struct BitField { #[field(3, 2)] field: Field }
 
         // Default value which maps to `0`, which is non-existent in `TestField`.
         let mut field = BitField::new();
@@ -579,7 +764,7 @@ mod tests {
     fn display_named_field_integer() {
         #[bitfield::bitfield(8)]
         #[derive(Display)]
-        struct BitField { #[field(3, 2)] field: u8 };
+        struct BitField { #[field(3, 2)] field: u8 }
 
         // Default value which maps to `0`, which is non-existent in `TestField`.
         let mut field = BitField::new();
@@ -633,6 +818,16 @@ mod tests {
         { field.set_flags2(Flags2::G4, true); }
         assert_print_eq!(field, "{}", 0, "-");
 
+        // Still no flags set, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.invert_flags(Flags::F0); }
+        assert_print_eq!(field, "{}", 0, "-");
+
+        // Still no flags set, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.invert_flags2(Flags2::G4); }
+        assert_print_eq!(field, "{}", 0, "-");
+
         // One flag set.
         field = field.set_flags(Flags::F0, true);
         assert_print_eq!(field, "{}", 1 << 0, "bitfield::Flags::F0");
@@ -663,6 +858,22 @@ mod tests {
 
         // No flags set.
         field = field.set_flags2(Flags2::G7, false);
+        assert_print_eq!(field, "{}", 0, "-");
+
+        // Invert a flag.
+        field = field.invert_flags(Flags::F0);
+        assert_print_eq!(field, "{}", 1 << 0, "bitfield::Flags::F0");
+
+        // Invert a flag.
+        field = field.invert_flags2(Flags2::G7);
+        assert_print_eq!(field, "{}", 1 << 0 | 1 << 7, "bitfield::Flags::F0 | bitfield::Flags2::G7");
+
+        // Invert a flag.
+        field = field.invert_flags(Flags::F0);
+        assert_print_eq!(field, "{}", 1 << 7, "bitfield::Flags2::G7");
+
+        // Invert a flag.
+        field = field.invert_flags2(Flags2::G7);
         assert_print_eq!(field, "{}", 0, "-");
     }
 
@@ -758,6 +969,14 @@ mod tests {
         // `false`.
         field = field.set(false);
         assert_print_eq!(field, "{}", 0, "false");
+
+        // `true`.
+        field = field.invert();
+        assert_print_eq!(field, "{}", 1 << 2, "true");
+
+        // `false`.
+        field = field.invert();
+        assert_print_eq!(field, "{}", 0, "false");
     }
 
     #[test]
@@ -781,6 +1000,14 @@ mod tests {
 
         // `false`.
         field = field.set(false);
+        assert_print_eq!(field, "{}", 0, "false");
+
+        // `true`.
+        field = field.invert();
+        assert_print_eq!(field, "{}", 1 << 0, "true");
+
+        // `false`.
+        field = field.invert();
         assert_print_eq!(field, "{}", 0, "false");
     }
 
@@ -850,6 +1077,11 @@ mod tests {
         { field.set(Flags::F0, true); }
         assert_print_eq!(field, "{}", 0, "-");
 
+        // Still no flags set, as the modified result is not stored.
+        #[allow(unused_must_use)]
+        { field.invert(Flags::F0); }
+        assert_print_eq!(field, "{}", 0, "-");
+
         // One flag set.
         field = field.set(Flags::F0, true);
         assert_print_eq!(field, "{}", 1 << 0, "F0");
@@ -872,6 +1104,14 @@ mod tests {
 
         // No flags set.
         field = field.set(Flags::F3, false);
+        assert_print_eq!(field, "{}", 0, "-");
+
+        // Invert a flag.
+        field = field.invert(Flags::F3);
+        assert_print_eq!(field, "{}", 1 << 3, "F3");
+
+        // Invert a flag.
+        field = field.invert(Flags::F3);
         assert_print_eq!(field, "{}", 0, "-");
     }
 
@@ -950,6 +1190,18 @@ mod tests {
         assert!(!field.flags_any());
         assert!(!field.flags_all());
         assert!(!field.flags2_any());
+        assert!(!field.flags2_all());
+
+        field = field.invert_flags(Flags::F1);
+        assert!(field.flags_any());
+        assert!(!field.flags_all());
+        assert!(!field.flags2_any());
+        assert!(!field.flags2_all());
+
+        field = field.invert_flags2(Flags2::G4);
+        assert!(field.flags_any());
+        assert!(!field.flags_all());
+        assert!(field.flags2_any());
         assert!(!field.flags2_all());
     }
 

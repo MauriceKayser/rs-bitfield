@@ -58,7 +58,7 @@ fn main() {
         .set_blink(true);
 
     if !char.styles.foreground_bright() {
-        char.styles = char.styles.set_foreground_bright(true);
+        char.styles = char.styles.invert_foreground_bright();
     }
 
     assert_eq!(&format!("{:#?}", &char),

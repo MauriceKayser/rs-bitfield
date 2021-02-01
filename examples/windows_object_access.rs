@@ -376,16 +376,16 @@ enum Thread {
 
 fn main() {
     let directory = AccessDirectory::new()
-        .set_object(Directory::List, true)
-        .set_object(Directory::Traverse, true)
-        .set_standard(Standard::Delete, true)
-        .set_standard(Standard::Synchronize, true);
+        + Directory::List        // Same as: `.set_object(Directory::List, true)`
+        + Directory::Traverse    // Same as: `.set_object(Directory::Traverse, true)`
+        + Standard::Delete       // Same as: `.set_standard(Standard::Delete, true)`
+        + Standard::Synchronize; // Same as: `.set_standard(Standard::Synchronize, true)`
 
     let file = AccessFile::new()
-        .set_object(File::Write, true)
-        .set_object(File::WriteAttributes, true)
-        .set_standard(Standard::Delete, true)
-        .set_standard(Standard::Synchronize, true);
+        + File::Write            // Same as: `.set_object(File::Write, true)`
+        + File::WriteAttributes  // Same as: `.set_object(File::WriteAttributes, true)`
+        + Standard::Delete       // Same as: `.set_standard(Standard::Delete, true)`
+        + Standard::Synchronize; // Same as: `.set_standard(Standard::Synchronize, true)`
 
     for flag in Standard::iter() {
         assert_eq!(

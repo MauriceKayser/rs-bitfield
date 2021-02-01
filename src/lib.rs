@@ -121,8 +121,11 @@ mod primitive;
 /// let styles = Styles::new()
 ///     .set_button(Button::YesNo)
 ///     .set_icon(Icon::Question)
-///     .set_style(Style::Foreground, true)
+///     .set_style(Style::Help, true)
 ///     .set_style(Style::TopMost, true);
+///
+/// // Alternatively:
+/// // let styles = Styles::new() + Button::YesNo + Icon::Question + Style::Help + Style::TopMost;
 ///
 /// // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-messageboxw
 /// user32::MessageBoxW(parent, "Text", "Title", styles);
@@ -590,6 +593,9 @@ mod primitive;
 ///
 /// /// Creates a copy of the bit field with all flags set to `false`.
 /// const fn #SETTER_none(&self) -> Self;
+///
+/// /// Creates a copy of the bit field with the value of the specified flag inverted.
+/// const fn invert_#FLAG(&self, flag: #FLAG_TYPE) -> Self;
 /// ```
 ///
 /// Example:
@@ -645,6 +651,20 @@ mod primitive;
 /// assert!(!field.has(Flag::Flag00000100));
 /// assert!(!field.has_all());
 /// assert!(!field.has_any());
+///
+/// field = field.invert(Flag::Flag00000001);
+/// assert!( field.has(Flag::Flag00000001));
+/// assert!(!field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!( field.has_any());
+///
+/// field = field.invert(Flag::Flag00000001);
+/// assert!(!field.has(Flag::Flag00000001));
+/// assert!(!field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!(!field.has_any());
 /// ```
 ///
 /// ### 2.2.2 Fields
@@ -655,12 +675,15 @@ mod primitive;
 ///
 /// For `bool` fields the following accessor methods are generated:
 ///
-/// ```ignore
+/// ```rust,ignore
 /// /// Gets the value of the field.
 /// const fn #GETTER(&self) -> bool;
 ///
 /// /// Creates a copy of the bit field with the new value.
 /// const fn #SETTER(&self, value: bool) -> Self;
+///
+/// /// Creates a copy of the bit field with the value of the field inverted.
+/// const fn invert_#FIELD(&self, flag: #FLAG_TYPE) -> Self;
 /// ```
 ///
 /// Example:
@@ -677,6 +700,12 @@ mod primitive;
 ///
 /// field = field.set(false);
 /// assert!(!field.get());
+///
+/// field = field.invert();
+/// assert!( field.get());
+///
+/// field = field.invert();
+/// assert!(!field.get());
 /// ```
 ///
 /// #### 2.2.2.2 Signed primitive integer types
@@ -686,7 +715,7 @@ mod primitive;
 ///
 /// For signed primitive integer type fields the following accessor methods are generated:
 ///
-/// ```ignore
+/// ```rust,ignore
 /// /// Gets the value of the field.
 /// const fn #GETTER(&self) -> #PRIMITIVE_TYPE;
 ///
@@ -715,7 +744,7 @@ mod primitive;
 /// For unsigned primitive integer type fields which are smaller than their full size, the following
 /// accessor methods are generated:
 ///
-/// ```ignore
+/// ```rust,ignore
 /// /// Gets the value of the field.
 /// const fn #GETTER(&self) -> #PRIMITIVE_TYPE;
 ///
@@ -747,7 +776,7 @@ mod primitive;
 /// A "signed primitive integer types"-like implementation is generated, which does not return a
 /// `core::result::Result` from the setter, if the full size of the integer is used:
 ///
-/// ```ignore
+/// ```rust,ignore
 /// /// Gets the value of the field.
 /// const fn #GETTER(&self) -> #PRIMITIVE_TYPE;
 ///
@@ -773,7 +802,7 @@ mod primitive;
 /// For fields of enumerations with an unsigned primitive integer representation, the following
 /// accessor methods are generated:
 ///
-/// ```ignore
+/// ```rust,ignore
 /// // NOTE: This method is `const` only if the `#![feature(const_trait_impl)]` from
 /// // https://github.com/rust-lang/rust/pull/68847 is used because `core::convert::TryFrom` is
 /// // used under the hood to convert the primitve value to an enumeration variant.
@@ -825,7 +854,7 @@ mod primitive;
 /// except that the `signed` keyword must be added in the `#[field]` attribute, which will cause the
 /// following accessor methods to be generated:
 ///
-/// ```ignore
+/// ```rust,ignore
 /// // NOTE: This method is `const` only if the `#![feature(const_trait_impl)]` from
 /// // https://github.com/rust-lang/rust/pull/68847 is used because `core::convert::TryFrom` is
 /// // used under the hood to convert the primitve value to an enumeration variant.
@@ -861,6 +890,166 @@ mod primitive;
 /// assert_eq!(field.get(), Ok(Field::MinusOne));
 ///
 /// field = field.set(Field::One);
+/// assert_eq!(field.get(), Ok(Field::One));
+/// ```
+///
+/// ### 2.2.3 `core::ops::*` implementations
+///
+/// Bit fields can be manipulated in a less verbose way than previously presented. For most fields
+/// and flags, a few `core::ops::*` trait implementations are generated.
+///
+/// *Note*: These shortcuts can not yet be used in a `const` context until traits can be implemented
+/// in a `const` way, see [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632).
+///
+/// #### 2.2.3.1 Flags
+///
+/// For flags the `core::ops::*` implementations are *not* generated under these conditions:
+/// - The flags are less visible than the bit field. Trait implementations of a `pub` bit field are
+/// `pub` themselves and would leak access to less visible flags.
+///
+///     Negative example:
+///
+///     ```rust
+///     #[bitfield::bitfield(8)]
+///     pub struct BitField(pub(crate) Flag);
+///     #
+///     # #[derive(Copy, Clone, Debug, bitfield::Flags)]
+///     # #[repr(u8)]
+///     # enum Flag {
+///     #    Flag00000001
+///     # }
+///     ```
+///
+/// If the condition is not met, the following `core::ops::*` implementations are generated:
+///
+/// ```rust,ignore
+/// core::ops::Add<#FLAG_TYPE>;
+/// core::ops::AddAssign<#FLAG_TYPE>;
+/// core::ops::BitXor<#FLAG_TYPE>;
+/// core::ops::BitXorAssign<#FLAG_TYPE>;
+/// core::ops::Sub<#FLAG_TYPE>;
+/// core::ops::SubAssign<#FLAG_TYPE>;
+/// ```
+///
+/// This allows flags to be enabled (`+`), disabled (`-`) and inverted (`^`) in the following ways:
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField(Flag);
+///
+/// #[derive(Copy, Clone, Debug, bitfield::Flags)]
+/// #[repr(u8)]
+/// enum Flag {
+///     Flag00000001,
+///     Flag00000010,
+///     Flag00000100,
+///     Flag00001000,
+///     Flag00010000,
+///     Flag00100000,
+///     Flag01000000,
+///     Flag10000000
+/// }
+///
+/// let mut field = BitField::new() + Flag::Flag00000001 ^ Flag::Flag00000010;
+/// assert!( field.has(Flag::Flag00000001));
+/// assert!( field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!( field.has_any());
+///
+/// field = field - Flag::Flag00000001;
+/// field = field ^ Flag::Flag00000010;
+/// assert!(!field.has(Flag::Flag00000001));
+/// assert!(!field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!(!field.has_any());
+///
+/// field += Flag::Flag00000001;
+/// field ^= Flag::Flag00000010;
+/// assert!( field.has(Flag::Flag00000001));
+/// assert!( field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!( field.has_any());
+///
+/// field = field - Flag::Flag00000001 ^ Flag::Flag00000010;
+/// assert!(!field.has(Flag::Flag00000001));
+/// assert!(!field.has(Flag::Flag00000010));
+/// assert!(!field.has(Flag::Flag00000100));
+/// assert!(!field.has_all());
+/// assert!(!field.has_any());
+/// ```
+///
+/// #### 2.2.3.2 Fields
+///
+/// For fields the `core::ops::*` implementations are *not* generated under these conditions:
+/// - The field is less visible than the bit field. Trait implementations of a `pub` bit field are
+/// `pub` themselves and would leak access to a less visible field.
+///
+///     Negative example:
+///
+///     ```rust
+///     #[bitfield::bitfield(8)]
+///     pub struct BitField(#[field(size = 3)] pub(crate) Field);
+///     #
+///     # #[derive(Copy, Clone, bitfield::Field)]
+///     # #[repr(u8)]
+///     # enum Field {
+///     #    Zero
+///     # }
+///     ```
+/// - The type of the field is used more than once in the bit field. The implementation can not know
+/// which field to access.
+///
+///     Negative example:
+///
+///     ```rust
+///     #[bitfield::bitfield(8)]
+///     struct BitField {
+///         #[field(size = 3)] f1: Field,
+///         #[field(size = 3)] f2: Field
+///     }
+///     #
+///     # #[derive(Clone, Copy, bitfield::Field)]
+///     # #[repr(u8)]
+///     # enum Field {
+///     #     Zero
+///     # }
+///     ```
+///
+/// If none of these conditions are met, the following `core::ops::*` implementations are generated:
+///
+/// ```rust,ignore
+/// core::ops::Add<#FIELD_TYPE>;
+/// core::ops::AddAssign<#FIELD_TYPE>;
+/// ```
+///
+/// This allows the field value to be set (`+`, analogous to how flags are activated):
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField(#[field(size = 3)] Field);
+///
+/// #[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
+/// #[repr(u8)]
+/// enum Field {
+///     // 0 is unused.
+///     One = 1,
+///     Two,
+///     Three
+/// }
+///
+/// let mut field = BitField::new() + Field::One;
+/// assert_eq!(field.get(), Ok(Field::One));
+///
+/// field = field.set(Field::Two);
+/// assert_eq!(field.get(), Ok(Field::Two));
+///
+/// field = field + Field::Three;
+/// assert_eq!(field.get(), Ok(Field::Three));
+///
+/// field += Field::One;
 /// assert_eq!(field.get(), Ok(Field::One));
 /// ```
 #[proc_macro_attribute]

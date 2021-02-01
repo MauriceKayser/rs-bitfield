@@ -136,10 +136,10 @@ enum BreakPointLength {
 fn main() {
     // Set a break point:
     let control = DebugControl::new() // = GetDR7();
-        .set_flag(Control::ExactInstructionLocal, true)
-        .set_flag(Control::DebugRegister0Local, true)
-        .set_type0(BreakPointType::Execute)
-        .set_length0(BreakPointLength::One);
+        .set_type0(BreakPointType::Execute) // Not possible as `+ BreakPointType::Execute`, because `BreakPointType` is used more than once.
+        .set_length0(BreakPointLength::One) // Not possible as `+ BreakPointLength::One`, because `BreakPointLength` is used more than once.
+        + Control::ExactInstructionLocal // Same as: `.set_flag(Control::ExactInstructionLocal, true)`
+        + Control::DebugRegister0Local;  // Same as: `.set_flag(Control::DebugRegister0Local, true)`
 
     println!("{:#?}", &control);
 

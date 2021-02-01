@@ -94,12 +94,12 @@ enum Modality {
 
 fn main() {
     let styles = Styles::new()
-        .set_button(Button::CancelTryContinue)
-        .set_icon(Icon::Exclamation)
-        .set_default_button(DefaultButton::Two)
-        .set_modality(Modality::Task)
-        .set_style(Style::Foreground, true)
-        .set_style(Style::TopMost, true);
+        + Button::CancelTryContinue // Same as: `.set_button(Button::CancelTryContinue)`
+        + Icon::Exclamation         // Same as: `.set_icon(Icon::Exclamation)`
+        + DefaultButton::Two        // Same as: `.set_default_button(DefaultButton::Two)`
+        + Modality::Task            // Same as: `.set_modality(Modality::Task)`
+        + Style::Foreground         // Same as: `.set_style(Style::Foreground, true)`
+        + Style::TopMost;           // Same as: `.set_style(Style::TopMost, true)`
 
     assert_eq!(
         styles.0,

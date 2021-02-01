@@ -3,6 +3,110 @@
 use syn::spanned::Spanned;
 
 impl super::BitField {
+    /// Returns (as truthfully as possible):
+    /// - `-1` if `left` is less visible than `right`.
+    /// - `0` if `left` and `right` have the same visibility.
+    /// - `1` if `left` is more visible than `right`.
+    ///
+    /// If `left` is `pub(in some::module)`, then `-1` is returned, except for when `right` is also
+    /// `pub(in some::module)`. Otherwise, paths are not compared to each other.
+    ///
+    /// See https://doc.rust-lang.org/reference/visibility-and-privacy.html
+    fn cmp_vis(left: &syn::Visibility, right: &syn::Visibility) -> i8 {
+        match left {
+            syn::Visibility::Public(_) => match right {
+                syn::Visibility::Public(_) => 0,
+
+                syn::Visibility::Crate(_) |
+                syn::Visibility::Restricted(_) |
+                syn::Visibility::Inherited => 1
+            },
+
+            syn::Visibility::Crate(_) => match right {
+                syn::Visibility::Public(_) => -1,
+
+                syn::Visibility::Crate(_) => 0,
+
+                syn::Visibility::Restricted(right) => {
+                    if let Some(right) = right.path.get_ident() {
+                        if right == "crate" { return 0; }
+                    }
+
+                    1
+                },
+
+                syn::Visibility::Inherited => 1
+            },
+
+            syn::Visibility::Restricted(left) => match right {
+                syn::Visibility::Public(_) => -1,
+
+                syn::Visibility::Crate(_) => {
+                    if let Some(left) = left.path.get_ident() {
+                        if left == "crate" { return 0; }
+                    }
+
+                    -1
+                },
+
+                syn::Visibility::Restricted(right) => {
+                    // Compare non-complex paths.
+                    if let Some(left) = left.path.get_ident() {
+                        if let Some(right) = right.path.get_ident() {
+                            if left == "self" {
+                                if right == "self" { return 0; }
+                            } else if left == "super" {
+                                if right == "self" { return 1; }
+                                else if right == "super" { return 0; }
+                            } else if left == "crate" {
+                                if right == "crate" { return 0; }
+                                return 1;
+                            }
+                        } else if left == "crate" {
+                            return 1;
+                        }
+                    } else {
+                        let left = &left.path;
+                        let right = &right.path;
+                        if quote::quote!(#left).to_string() == quote::quote!(#right).to_string() {
+                            return 0;
+                        }
+                    }
+
+                    // Complex paths, or `vis(left) < vis(right)`.
+                    -1
+                },
+
+                syn::Visibility::Inherited => {
+                    if let Some(left) = left.path.get_ident() {
+                        if left == "self" {
+                            return 0;
+                        }
+                    }
+
+                    1
+                }
+            },
+
+            syn::Visibility::Inherited => match right {
+                syn::Visibility::Public(_) |
+                syn::Visibility::Crate(_) => -1,
+
+                syn::Visibility::Restricted(right) => {
+                    if let Some(right) = right.path.get_ident() {
+                        if right == "self" {
+                            return 0;
+                        }
+                    }
+
+                    -1
+                }
+
+                syn::Visibility::Inherited => 0
+            }
+        }
+    }
+
     /// Returns the narrowest primitive size for a field.
     fn field_primitive_size(size: u8) -> u8 {
         const SIZES: &[u8] = &[8, 16, 32, 64, 128];
@@ -19,15 +123,15 @@ impl super::BitField {
         &self,
         entry: &super::Entry,
         getter: &syn::Ident,
-        setter: &syn::Ident
+        setter: &syn::Ident,
+        inverter: &syn::Ident
     ) -> proc_macro2::TokenStream {
         let ty_size = &self.attr.size;
         let attrs = &entry.attrs;
         let vis = &entry.vis;
         let ty = &entry.ty;
 
-        if let Some(field) = &entry.field
-        {
+        if let Some(field) = &entry.field {
             let bit = field.bit.as_ref().unwrap().base10_parse::<u8>().unwrap();
             let size = field.size.as_ref().unwrap().base10_parse::<u8>().unwrap();
 
@@ -58,6 +162,14 @@ impl super::BitField {
                         #[must_use = "leaves `self` unmodified and returns a modified variant"]
                         #vis const fn #setter(&self, value: #ty) -> Self {
                             self._set_bit(#bit, value)
+                        }
+
+                        #(#attrs)*
+                        /// Creates a copy of the bit field with the value of the field inverted.
+                        #[inline(always)]
+                        #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                        #vis const fn #inverter(&self) -> Self {
+                            self._invert_bit(#bit)
                         }
                     };
                 } else if crate::primitive::is_signed_primitive(ty) {
@@ -243,6 +355,14 @@ impl super::BitField {
                 #vis const fn #setter_none(&self) -> Self {
                     Self(self.0 & !Self::#getter_mask())
                 }
+
+                #(#attrs)*
+                /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                #vis const fn #inverter(&self, flag: #ty) -> Self {
+                    self._invert_bit(flag as u8)
+                }
             }
         }
     }
@@ -257,6 +377,8 @@ impl super::BitField {
                     fields.push(Self::generate_accessor(
                         &self, &entry.entry, &entry.ident, &syn::Ident::new(
                             &format!("set_{}", &entry.ident), entry.ident.span()
+                        ), &syn::Ident::new(
+                            &format!("invert_{}", &entry.ident), entry.ident.span()
                         )
                     ));
                 }
@@ -266,10 +388,13 @@ impl super::BitField {
 
             super::Data::Tuple(entry) => {
                 vec!(Self::generate_accessor(
-                    &self, entry, &syn::Ident::new(
+                    &self, entry,
+                    &syn::Ident::new(
                         if entry.field.is_some() { "get" } else { "has" },
                         entry.ty.span()
-                    ), &syn::Ident::new("set", entry.ty.span())
+                    ),
+                    &syn::Ident::new("set", entry.ty.span()),
+                    &syn::Ident::new("invert", entry.ty.span())
                 ))
             }
         };
@@ -283,6 +408,192 @@ impl super::BitField {
         quote::quote! {
             impl #ident {
                 #(#fields)*
+            }
+        }
+    }
+
+    /// Generates `core::ops::*` implementations for flags, but only if the flag visibility is equal
+    /// or higher than the bit field visibility, and for fields, if the type of the field is only
+    /// used once.
+    fn generate_accessors_ops(&self) -> proc_macro2::TokenStream {
+        // Collect the amount of occurrences for used field types.
+        let mut field_type_occurrences = std::collections::HashMap::new();
+
+        for ty in self.data
+            .entries()
+            .iter()
+            .filter_map(|x| x.field.is_some().then(|| &x.ty))
+        {
+            let ty = quote::quote!(#ty).to_string();
+
+            if let Some(occurrences) = field_type_occurrences.get_mut(&ty) {
+                *occurrences += 1;
+            } else {
+                field_type_occurrences.insert(ty, 1usize);
+            }
+        }
+
+        // Collect all operator implementations.
+        let mut implementations = vec!();
+
+        match &self.data {
+            super::Data::Named(entries) => {
+                for entry in entries {
+                    if entry.entry.field.is_some() {
+                        if let Some(ident) = entry.entry.ty.get_ident() {
+                            if crate::primitive::is_primitive(ident) {
+                                continue;
+                            }
+                        }
+
+                        let ty = &entry.entry.ty;
+                        let ty = quote::quote!(#ty).to_string();
+
+                        if let Some(occurrences) = field_type_occurrences.get(&ty) {
+                            if *occurrences == 1 {
+                                implementations.push(Self::generate_accessor_ops_field(
+                                    &self, &entry.entry.ty, &syn::Ident::new(
+                                        &format!("set_{}", &entry.ident), entry.ident.span()
+                                    )
+                                ));
+                            }
+                        }
+                    } else {
+                        if Self::cmp_vis(&entry.entry.vis, &self.vis) >= 0 {
+                            implementations.push(Self::generate_accessor_ops_flags(
+                                &self, &entry.entry.ty, &syn::Ident::new(
+                                    &format!("set_{}", &entry.ident), entry.ident.span()
+                                ),&syn::Ident::new(
+                                    &format!("invert_{}", &entry.ident), entry.ident.span()
+                                )
+                            ));
+                        }
+                    }
+                }
+            },
+
+            super::Data::Tuple(entry) => {
+                if entry.field.is_some() {
+                    if !entry.ty.get_ident()
+                        .map(|i| crate::primitive::is_primitive(i))
+                        .unwrap_or_default()
+                    {
+                        let ty = &entry.ty;
+                        let ty = quote::quote!(#ty).to_string();
+
+                        if let Some(occurrences) = field_type_occurrences.get(&ty) {
+                            if *occurrences == 1 {
+                                implementations.push(Self::generate_accessor_ops_field(
+                                    &self, &entry.ty,
+                                    &syn::Ident::new("set", entry.ty.span())
+                                ));
+                            }
+                        }
+                    }
+                } else {
+                    if Self::cmp_vis(&entry.vis, &self.vis) >= 0 {
+                        implementations.push(Self::generate_accessor_ops_flags(
+                            &self, &entry.ty,
+                            &syn::Ident::new("set", entry.ty.span()),
+                            &syn::Ident::new("invert", entry.ty.span())
+                        ));
+                    }
+                }
+            }
+        }
+
+        if implementations.is_empty() {
+            return proc_macro2::TokenStream::new();
+        }
+
+        quote::quote! {
+            #(#implementations)*
+        }
+    }
+
+    /// Generates `core::ops::*` implementations for a single field in a bit field.
+    fn generate_accessor_ops_field(
+        &self,
+        field: &syn::Path,
+        setter: &syn::Ident
+    ) -> proc_macro2::TokenStream {
+        let ty = &self.ident;
+
+        quote::quote! {
+            impl core::ops::Add<#field> for #ty {
+                type Output = Self;
+
+                #[inline(always)]
+                fn add(self, value: #field) -> Self::Output {
+                    self.#setter(value)
+                }
+            }
+
+            impl core::ops::AddAssign<#field> for #ty {
+                #[inline(always)]
+                fn add_assign(&mut self, value: #field) {
+                    self.0 = self.#setter(value).0;
+                }
+            }
+        }
+    }
+
+    /// Generates `core::ops::*` implementations for a single flag type in a bit field.
+    fn generate_accessor_ops_flags(
+        &self,
+        flags: &syn::Path,
+        setter: &syn::Ident,
+        inverter: &syn::Ident
+    ) -> proc_macro2::TokenStream {
+        let ty = &self.ident;
+
+        quote::quote! {
+            impl core::ops::Add<#flags> for #ty {
+                type Output = Self;
+
+                #[inline(always)]
+                fn add(self, flag: #flags) -> Self::Output {
+                    self.#setter(flag, true)
+                }
+            }
+
+            impl core::ops::AddAssign<#flags> for #ty {
+                #[inline(always)]
+                fn add_assign(&mut self, flag: #flags) {
+                    self.0 = self.#setter(flag, true).0;
+                }
+            }
+
+            impl core::ops::BitXor<#flags> for #ty {
+                type Output = Self;
+
+                #[inline(always)]
+                fn bitxor(self, flag: #flags) -> Self::Output {
+                    self.#inverter(flag)
+                }
+            }
+
+            impl core::ops::BitXorAssign<#flags> for #ty {
+                #[inline(always)]
+                fn bitxor_assign(&mut self, flag: #flags) {
+                    self.0 = self.#inverter(flag).0;
+                }
+            }
+
+            impl core::ops::Sub<#flags> for #ty {
+                type Output = Self;
+
+                #[inline(always)]
+                fn sub(self, flag: #flags) -> Self::Output {
+                    self.#setter(flag, false)
+                }
+            }
+
+            impl core::ops::SubAssign<#flags> for #ty {
+                #[inline(always)]
+                fn sub_assign(&mut self, flag: #flags) {
+                    self.0 = self.#setter(flag, false).0;
+                }
             }
         }
     }
@@ -306,6 +617,12 @@ impl super::BitField {
                     let cleared = self.0 & !(1 << position);
 
                     Self(cleared | ((value as #ty_size) << position))
+                }
+
+                /// Returns a modified instance with the bit value inverted.
+                #[inline(always)]
+                const fn _invert_bit(&self, position: u8) -> Self {
+                    Self(self.0 ^ ((1 as #ty_size) << position))
                 }
 
                 /// Returns a field (subset of bits) from the internal value.
@@ -818,6 +1135,7 @@ impl core::convert::Into<proc_macro2::TokenStream> for super::BitField {
         let implementation = self.generate_impl();
         let accessors_low = self.generate_accessors_low();
         let accessors = self.generate_accessors();
+        let accessors_ops = self.generate_accessors_ops();
         let assertions = self.generate_assertions();
         let debug = self.generate_debug();
         let display = self.generate_display();
@@ -827,6 +1145,7 @@ impl core::convert::Into<proc_macro2::TokenStream> for super::BitField {
             #implementation
             #accessors_low
             #accessors
+            #accessors_ops
             #assertions
             #debug
             #display
@@ -846,9 +1165,10 @@ mod tests {
             if let super::super::Data::Tuple(entry) = &bitfield.data {
                 let getter = syn::Ident::new("test_get", entry.ty.span());
                 let setter = syn::Ident::new("test_set", entry.ty.span());
+                let inverter = syn::Ident::new("test_invert", entry.ty.span());
 
                 assert_eq!(
-                    bitfield.generate_accessor(&entry, &getter, &setter).to_string(),
+                    bitfield.generate_accessor(&entry, &getter, &setter, &inverter).to_string(),
                     $result.to_string()
                 );
             } else { panic!("expected tuple struct") }
@@ -879,6 +1199,63 @@ mod tests {
     }
 
     // Test generation.
+
+    #[test]
+    fn cmp_vis() {
+        let visibilities: &[syn::Visibility] = &[
+            syn::parse_str::<syn::Visibility>("pub").unwrap(),
+            syn::parse_str::<syn::Visibility>("crate").unwrap(),
+            syn::parse_str::<syn::Visibility>("pub(crate)").unwrap(),
+            syn::parse_str::<syn::Visibility>("pub(super)").unwrap(),
+            syn::parse_str::<syn::Visibility>("pub(in super)").unwrap(),
+            syn::parse_str::<syn::Visibility>("pub(in some::module)").unwrap(),
+            syn::parse_str::<syn::Visibility>("pub(in more::module)").unwrap(),
+            syn::parse_str::<syn::Visibility>("pub(self)").unwrap(),
+            syn::parse_str::<syn::Visibility>("pub(in self)").unwrap(),
+            syn::parse_str::<syn::Visibility>("").unwrap()
+        ];
+
+        const EXPECTED_RESULTS: &[i8] = &[
+        //   p   c   p   p   p   p   p   p   p   p
+        //   u   r   u   u   u   u   u   u   u   r
+        //   b   a   b   b   b   b   b   b   b   i
+        //       t   (   (   (   (   (   (   (   v
+        //       e   c   s   i   s   m   s   i
+        //           r   u   n   o   o   e   n
+        //           a   p       m   r   l
+        //           t   e   s   e   e   f   s
+        //           e   r   u   :   :   )   e
+        //           )   )   p   :   :       l
+        //                   e   m   m       f
+        //                   r   o   o       )
+        //                   )   d   d
+        //                       u   u
+        //                       l   l
+        //                       e   e
+        //                       )   )
+             0,  1,  1,  1,  1,  1,  1,  1,  1,  1, // pub (0-9)
+            -1,  0,  0,  1,  1,  1,  1,  1,  1,  1, // crate (10-19)
+            -1,  0,  0,  1,  1,  1,  1,  1,  1,  1, // pub(crate) (20-29)
+            -1, -1, -1,  0,  0, -1, -1,  1,  1,  1, // pub(super) (30-39)
+            -1, -1, -1,  0,  0, -1, -1,  1,  1,  1, // pub(in super) (40-49)
+            -1, -1, -1, -1, -1,  0, -1, -1, -1,  1, // pub(in some::module) (50-59)
+            -1, -1, -1, -1, -1, -1,  0, -1, -1,  1, // pub(in more::module) (60-69)
+            -1, -1, -1, -1, -1, -1, -1,  0,  0,  0, // pub(self) (70-79)
+            -1, -1, -1, -1, -1, -1, -1,  0,  0,  0, // pub(in self) (80-89)
+            -1, -1, -1, -1, -1, -1, -1,  0,  0,  0  // priv (90-99)
+        ];
+
+        let mut index = 0;
+        for left in 0..visibilities.len() {
+            for right in 0..visibilities.len() {
+                assert_eq!(
+                    (EXPECTED_RESULTS[index], index),
+                    (BitField::cmp_vis(&visibilities[left], &visibilities[right]), index)
+                );
+                index += 1;
+            }
+        }
+    }
 
     #[test]
     fn field_primitive_size() {
@@ -964,6 +1341,15 @@ mod tests {
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
                 Self(self.0 & !Self::test_get_mask())
+            }
+
+            #[some_attribute1]
+            #[some_attribute2]
+            /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[inline(always)]
+            #[must_use = "leaves `self` unmodified and returns a modified variant"]
+            const fn test_invert(&self, flag: A) -> Self {
+                self._invert_bit(flag as u8)
             }
         });
 
@@ -1057,6 +1443,13 @@ mod tests {
             pub const fn test_set_none(&self) -> Self {
                 Self(self.0 & !Self::test_get_mask())
             }
+
+            /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[inline(always)]
+            #[must_use = "leaves `self` unmodified and returns a modified variant"]
+            pub const fn test_invert(&self, flag: A) -> Self {
+                self._invert_bit(flag as u8)
+            }
         });
 
         assert_accessor!(
@@ -1142,6 +1535,13 @@ mod tests {
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
                 Self(self.0 & !Self::test_get_mask())
+            }
+
+            /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[inline(always)]
+            #[must_use = "leaves `self` unmodified and returns a modified variant"]
+            const fn test_invert(&self, flag: B) -> Self {
+                self._invert_bit(flag as u8)
             }
         });
 
@@ -1229,6 +1629,13 @@ mod tests {
             const fn test_set_none(&self) -> Self {
                 Self(self.0 & !Self::test_get_mask())
             }
+
+            /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[inline(always)]
+            #[must_use = "leaves `self` unmodified and returns a modified variant"]
+            const fn test_invert(&self, flag: A) -> Self {
+                self._invert_bit(flag as u8)
+            }
         });
 
         assert_accessor!(
@@ -1297,6 +1704,13 @@ mod tests {
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: bool) -> Self {
                 self._set_bit(2u8, value)
+            }
+
+            /// Creates a copy of the bit field with the value of the field inverted.
+            #[inline(always)]
+            #[must_use = "leaves `self` unmodified and returns a modified variant"]
+            const fn test_invert(&self) -> Self {
+                self._invert_bit(2u8)
             }
         });
 
@@ -1484,6 +1898,13 @@ mod tests {
                 const fn set_none(&self) -> Self {
                     Self(self.0 & !Self::has_mask())
                 }
+
+                /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn invert(&self, flag: B) -> Self {
+                    self._invert_bit(flag as u8)
+                }
             }
         });
 
@@ -1571,6 +1992,13 @@ mod tests {
                 const fn set_b_none(&self) -> Self {
                     Self(self.0 & !Self::b_mask())
                 }
+
+                /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn invert_b(&self, flag: B) -> Self {
+                    self._invert_bit(flag as u8)
+                }
             }
         });
 
@@ -1657,6 +2085,13 @@ mod tests {
                     Self(self.0 & !Self::b_mask())
                 }
 
+                /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn invert_b(&self, flag: B) -> Self {
+                    self._invert_bit(flag as u8)
+                }
+
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
                 #[inline(always)]
@@ -1728,6 +2163,285 @@ mod tests {
     }
 
     #[test]
+    fn accessors_ops() {
+        assert_compare!(generate_accessors_ops, "8", "struct A(B);", quote::quote! {
+            impl core::ops::Add<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn add(self, flag: B) -> Self::Output {
+                    self.set(flag, true)
+                }
+            }
+
+            impl core::ops::AddAssign<B> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, flag: B) {
+                    self.0 = self.set(flag, true).0;
+                }
+            }
+
+            impl core::ops::BitXor<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn bitxor(self, flag: B) -> Self::Output {
+                    self.invert(flag)
+                }
+            }
+
+            impl core::ops::BitXorAssign<B> for A {
+                #[inline(always)]
+                fn bitxor_assign(&mut self, flag: B) {
+                    self.0 = self.invert(flag).0;
+                }
+            }
+
+            impl core::ops::Sub<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn sub(self, flag: B) -> Self::Output {
+                    self.set(flag, false)
+                }
+            }
+
+            impl core::ops::SubAssign<B> for A {
+                #[inline(always)]
+                fn sub_assign(&mut self, flag: B) {
+                    self.0 = self.set(flag, false).0;
+                }
+            }
+        });
+
+        assert_compare!(generate_accessors_ops, "8", "pub struct A(B);", quote::quote! {});
+
+        assert_compare!(generate_accessors_ops, "8", "struct A(#[field(0, 1)] B);", quote::quote! {
+            impl core::ops::Add<B> for A {
+                type Output = Self;
+
+                #[inline(always)] fn add(self, value: B) -> Self::Output {
+                    self.set(value)
+                }
+            }
+
+            impl core::ops::AddAssign<B> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, value: B) {
+                    self.0 = self.set(value).0;
+                }
+            }
+        });
+
+        assert_compare!(generate_accessors_ops, "16", "struct A(u8);", quote::quote! {});
+
+        assert_compare!(generate_accessors_ops, "8", "struct A { #[field(0, 1)] b: u8 }", quote::quote! {});
+
+        assert_compare!(generate_accessors_ops, "8", "struct A {#[field(0, 1)] b1: B, #[field(1, 1)] b2: B}", quote::quote! {});
+
+        assert_compare!(generate_accessors_ops, "8", "struct A {#[field(0, 1)] b: B, #[field(1, 1)] c: C}", quote::quote! {
+            impl core::ops::Add<B> for A {
+                type Output = Self;
+
+                #[inline(always)] fn add(self, value: B) -> Self::Output {
+                    self.set_b(value)
+                }
+            }
+
+            impl core::ops::AddAssign<B> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, value: B) {
+                    self.0 = self.set_b(value).0;
+                }
+            }
+
+            impl core::ops::Add<C> for A {
+                type Output = Self;
+
+                #[inline(always)] fn add(self, value: C) -> Self::Output {
+                    self.set_c(value)
+                }
+            }
+
+            impl core::ops::AddAssign<C> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, value: C) {
+                    self.0 = self.set_c(value).0;
+                }
+            }
+        });
+
+        assert_compare!(generate_accessors_ops, "8", "struct A {#[field(0, 1)] b: B, #[field(1, 1)] b: B, #[field(2, 1)] c: C}", quote::quote! {
+            impl core::ops::Add<C> for A {
+                type Output = Self;
+
+                #[inline(always)] fn add(self, value: C) -> Self::Output {
+                    self.set_c(value)
+                }
+            }
+
+            impl core::ops::AddAssign<C> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, value: C) {
+                    self.0 = self.set_c(value).0;
+                }
+            }
+        });
+
+        assert_compare!(generate_accessors_ops, "8", "struct A {}", quote::quote! {});
+
+        assert_compare!(generate_accessors_ops, "8", "struct A { b: B }", quote::quote! {
+            impl core::ops::Add<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn add(self, flag: B) -> Self::Output {
+                    self.set_b(flag, true)
+                }
+            }
+
+            impl core::ops::AddAssign<B> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, flag: B) {
+                    self.0 = self.set_b(flag, true).0;
+                }
+            }
+
+            impl core::ops::BitXor<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn bitxor(self, flag: B) -> Self::Output {
+                    self.invert_b(flag)
+                }
+            }
+
+            impl core::ops::BitXorAssign<B> for A {
+                #[inline(always)]
+                fn bitxor_assign(&mut self, flag: B) {
+                    self.0 = self.invert_b(flag).0;
+                }
+            }
+
+            impl core::ops::Sub<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn sub(self, flag: B) -> Self::Output {
+                    self.set_b(flag, false)
+                }
+            }
+
+            impl core::ops::SubAssign<B> for A {
+                #[inline(always)]
+                fn sub_assign(&mut self, flag: B) {
+                    self.0 = self.set_b(flag, false).0;
+                }
+            }
+        });
+
+        assert_compare!(generate_accessors_ops, "8", "pub struct A { b: B }", quote::quote! {});
+
+        assert_compare!(generate_accessors_ops, "8", "struct A { b: B, c: C }", quote::quote! {
+            impl core::ops::Add<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn add(self, flag: B) -> Self::Output {
+                    self.set_b(flag, true)
+                }
+            }
+
+            impl core::ops::AddAssign<B> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, flag: B) {
+                    self.0 = self.set_b(flag, true).0;
+                }
+            }
+
+            impl core::ops::BitXor<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn bitxor(self, flag: B) -> Self::Output {
+                    self.invert_b(flag)
+                }
+            }
+
+            impl core::ops::BitXorAssign<B> for A {
+                #[inline(always)]
+                fn bitxor_assign(&mut self, flag: B) {
+                    self.0 = self.invert_b(flag).0;
+                }
+            }
+
+            impl core::ops::Sub<B> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn sub(self, flag: B) -> Self::Output {
+                    self.set_b(flag, false)
+                }
+            }
+
+            impl core::ops::SubAssign<B> for A {
+                #[inline(always)]
+                fn sub_assign(&mut self, flag: B) {
+                    self.0 = self.set_b(flag, false).0;
+                }
+            }
+
+            impl core::ops::Add<C> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn add(self, flag: C) -> Self::Output {
+                    self.set_c(flag, true)
+                }
+            }
+
+            impl core::ops::AddAssign<C> for A {
+                #[inline(always)]
+                fn add_assign(&mut self, flag: C) {
+                    self.0 = self.set_c(flag, true).0;
+                }
+            }
+
+            impl core::ops::BitXor<C> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn bitxor(self, flag: C) -> Self::Output {
+                    self.invert_c(flag)
+                }
+            }
+
+            impl core::ops::BitXorAssign<C> for A {
+                #[inline(always)]
+                fn bitxor_assign(&mut self, flag: C) {
+                    self.0 = self.invert_c(flag).0;
+                }
+            }
+
+            impl core::ops::Sub<C> for A {
+                type Output = Self;
+
+                #[inline(always)]
+                fn sub(self, flag: C) -> Self::Output {
+                    self.set_c(flag, false)
+                }
+            }
+
+            impl core::ops::SubAssign<C> for A {
+                #[inline(always)]
+                fn sub_assign(&mut self, flag: C) {
+                    self.0 = self.set_c(flag, false).0;
+                }
+            }
+        });
+    }
+
+    #[test]
     fn accessors_low() {
         assert_compare!(generate_accessors_low, "8", "struct A(B);", quote::quote! {
             impl A {
@@ -1743,6 +2457,12 @@ mod tests {
                     let cleared = self.0 & !(1 << position);
 
                     Self(cleared | ((value as u8) << position))
+                }
+
+                /// Returns a modified instance with the bit value inverted.
+                #[inline(always)]
+                const fn _invert_bit(&self, position: u8) -> Self {
+                    Self(self.0 ^ ((1 as u8) << position))
                 }
 
                 /// Returns a field (subset of bits) from the internal value.
@@ -1797,6 +2517,12 @@ mod tests {
                     Self(cleared | ((value as u16) << position))
                 }
 
+                /// Returns a modified instance with the bit value inverted.
+                #[inline(always)]
+                const fn _invert_bit(&self, position: u8) -> Self {
+                    Self(self.0 ^ ((1 as u16) << position))
+                }
+
                 /// Returns a field (subset of bits) from the internal value.
                 #[inline(always)]
                 const fn _field(&self, position: u8, size: u8) -> u16 {
@@ -1847,6 +2573,12 @@ mod tests {
                     let cleared = self.0 & !(1 << position);
 
                     Self(cleared | ((value as u32) << position))
+                }
+
+                /// Returns a modified instance with the bit value inverted.
+                #[inline(always)]
+                const fn _invert_bit(&self, position: u8) -> Self {
+                    Self(self.0 ^ ((1 as u32) << position))
                 }
 
                 /// Returns a field (subset of bits) from the internal value.
@@ -1901,6 +2633,12 @@ mod tests {
                     Self(cleared | ((value as u64) << position))
                 }
 
+                /// Returns a modified instance with the bit value inverted.
+                #[inline(always)]
+                const fn _invert_bit(&self, position: u8) -> Self {
+                    Self(self.0 ^ ((1 as u64) << position))
+                }
+
                 /// Returns a field (subset of bits) from the internal value.
                 #[inline(always)]
                 const fn _field(&self, position: u8, size: u8) -> u64 {
@@ -1951,6 +2689,12 @@ mod tests {
                     let cleared = self.0 & !(1 << position);
 
                     Self(cleared | ((value as u128) << position))
+                }
+
+                /// Returns a modified instance with the bit value inverted.
+                #[inline(always)]
+                const fn _invert_bit(&self, position: u8) -> Self {
+                    Self(self.0 ^ ((1 as u128) << position))
                 }
 
                 /// Returns a field (subset of bits) from the internal value.
@@ -2734,6 +3478,12 @@ mod tests {
                         Self(cleared | ((value as u16) << position))
                     }
 
+                    /// Returns a modified instance with the bit value inverted.
+                    #[inline(always)]
+                    const fn _invert_bit(&self, position: u8) -> Self {
+                        Self(self.0 ^ ((1 as u16) << position))
+                    }
+
                     /// Returns a field (subset of bits) from the internal value.
                     #[inline(always)]
                     const fn _field(&self, position: u8, size: u8) -> u16 {
@@ -2832,6 +3582,14 @@ mod tests {
                         Self(self.0 & !Self::b_mask())
                     }
 
+                    #[doc = " D2 "]
+                    /// Creates a copy of the bit field with the value of the specified flag inverted.
+                    #[inline(always)]
+                    #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                    pub(crate) const fn invert_b(&self, flag: B) -> Self {
+                        self._invert_bit(flag as u8)
+                    }
+
                     #[doc = " D3 "]
                     /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                     /// not be converted to the expected type.
@@ -2917,6 +3675,78 @@ mod tests {
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn set_d_none(&self) -> Self {
                         Self(self.0 & !Self::d_mask())
+                    }
+
+                    #[doc = " D4 "]
+                    /// Creates a copy of the bit field with the value of the specified flag inverted.
+                    #[inline(always)]
+                    #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                    const fn invert_d(&self, flag: D) -> Self {
+                        self._invert_bit(flag as u8)
+                    }
+                }
+
+                // accessors ops flags
+                impl core::ops::Add<B> for A {
+                    type Output = Self;
+
+                    #[inline(always)]
+                    fn add(self, flag: B) -> Self::Output {
+                        self.set_b(flag, true)
+                    }
+                }
+
+                impl core::ops::AddAssign<B> for A {
+                    #[inline(always)]
+                    fn add_assign(&mut self, flag: B) {
+                        self.0 = self.set_b(flag, true).0;
+                    }
+                }
+
+                impl core::ops::BitXor<B> for A {
+                    type Output = Self;
+
+                    #[inline(always)]
+                    fn bitxor(self, flag: B) -> Self::Output {
+                        self.invert_b(flag)
+                    }
+                }
+
+                impl core::ops::BitXorAssign<B> for A {
+                    #[inline(always)]
+                    fn bitxor_assign(&mut self, flag: B) {
+                        self.0 = self.invert_b(flag).0;
+                    }
+                }
+
+                impl core::ops::Sub<B> for A {
+                    type Output = Self;
+
+                    #[inline(always)]
+                    fn sub(self, flag: B) -> Self::Output {
+                        self.set_b(flag, false)
+                    }
+                }
+
+                impl core::ops::SubAssign<B> for A {
+                    #[inline(always)]
+                    fn sub_assign(&mut self, flag: B) {
+                        self.0 = self.set_b(flag, false).0;
+                    }
+                }
+
+                impl core::ops::Add<C> for A {
+                    type Output = Self;
+
+                    #[inline(always)] fn add(self, value: C) -> Self::Output {
+                        self.set_c(value)
+                    }
+                }
+
+                impl core::ops::AddAssign<C> for A {
+                    #[inline(always)]
+                    fn add_assign(&mut self, value: C) {
+                        self.0 = self.set_c(value).0;
                     }
                 }
 
