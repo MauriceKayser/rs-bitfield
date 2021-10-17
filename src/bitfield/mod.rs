@@ -6,8 +6,10 @@ pub(super) mod generate;
 
 /// Stores the information that is transmitted via the proc-macro attribute header.
 struct Attribute {
-    size: syn::Ident,
+    base_type: syn::Path,
+    primitive_type: syn::Ident,
     bits: Option<u8>,
+    is_non_zero: bool,
     allow_overlaps: Option<syn::Ident>
 }
 

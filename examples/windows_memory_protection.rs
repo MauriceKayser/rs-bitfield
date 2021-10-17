@@ -97,7 +97,7 @@ impl Protection {
 #[derive(Clone, Copy, Debug, bitfield::Field)]
 #[repr(u8)]
 enum Access {
-    // 0 is reserved.
+    // Variant 0 is reserved.
     None = 1 << 0,
     Read = 1 << 1,
     ReadWrite = 1 << 2,

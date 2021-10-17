@@ -59,7 +59,7 @@ enum Button {
     YesNo,
     RetryCancel,
     CancelTryContinue
-    // Bits 7 - 15 are reserved.
+    // Variants 7 - 15 are reserved.
 }
 
 #[derive(Clone, Copy, Debug, bitfield::Field)]
@@ -69,7 +69,7 @@ enum DefaultButton {
     Two,
     Three,
     Four
-    // Bits 4 - 15 are reserved.
+    // Variants 4 - 15 are reserved.
 }
 
 #[derive(Clone, Copy, Debug, bitfield::Field)]
@@ -80,7 +80,7 @@ enum Icon {
     Question,
     Exclamation,
     Information
-    // Bits 5 - 15 are reserved.
+    // Variants 5 - 15 are reserved.
 }
 
 #[derive(Clone, Copy, Debug, bitfield::Field)]
@@ -89,7 +89,7 @@ enum Modality {
     Application,
     System,
     Task
-    // Bit 3 is reserved.
+    // Variant 3 is reserved.
 }
 
 fn main() {

@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 extern crate alloc;
 
 /// [Writing an OS in Rust - VGA Text Mode](https://os.phil-opp.com/vga-text-mode/)

@@ -144,10 +144,17 @@ mod primitive;
 ///
 /// Examples:
 ///
-/// ```ignore
-/// #[bitfield::bitfield(8)]    // Abstracts access to the bits in a `u8`.
-/// #[bitfield::bitfield(32)]   // Abstracts access to the bits in a `u32`.
-/// #[bitfield::bitfield(size)] // Abstracts access to the bits in a `usize`.
+/// ```rust,compile_fail
+/// // Abstracts access to the bits in a `u8`.
+/// #[bitfield::bitfield(8)]
+/// // Abstracts access to the bits in a `u32`.
+/// #[bitfield::bitfield(32)]
+/// // Abstracts access to the bits in a `usize`.
+/// #[bitfield::bitfield(size)]
+/// // Abstracts access to the bits in a `core::num::NonZeroU32`, for usage with `Option<T>`, see
+/// // `examples/windows_memory_protection.rs`. Caution: All UBs from `core::num::NonZeroU32` apply
+/// // as well, f. e. constructing an instance with the value `0` (`T::new()`)!
+/// #[bitfield::bitfield(NonZero32)]
 /// ```
 ///
 /// If fields or flags overlap, a compile time error will occur to warn the user of this crate about

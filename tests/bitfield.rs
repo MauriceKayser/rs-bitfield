@@ -11,6 +11,13 @@ enum Field {
     F3
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
+#[repr(u8)]
+enum Field2 {
+    F0,
+    F1,
+}
+
 /// When used as a field in a bit field, the field can only contain one of the enum variants.
 /// Variants can only be represented in 8 bits, as the highest bit is used for the sign.
 #[derive(Clone, Copy, Debug, bitfield::Field)]
@@ -1203,6 +1210,71 @@ mod tests {
         assert!(!field.flags_all());
         assert!(field.flags2_any());
         assert!(!field.flags2_all());
+    }
+
+    #[test]
+    fn non_zero_values() {
+        #[bitfield::bitfield(NonZero8)]
+        struct BitField(#[field(size = 2)] Field2);
+
+        let mut field = BitField::new();
+        assert_eq!(field.get(), Ok(Field2::F0));
+        field = field.set(Field2::F1);
+        assert_eq!(field.get(), Ok(Field2::F1));
+        field = field.set(Field2::F0);
+        assert_eq!(field.get(), Ok(Field2::F0));
+    }
+
+    #[test]
+    fn non_zero_size() {
+        #[bitfield::bitfield(NonZero8)]
+        struct BitField8(Flags);
+        #[bitfield::bitfield(NonZero16)]
+        struct BitField16(Flags);
+        #[bitfield::bitfield(NonZero32)]
+        struct BitField32(Flags);
+        #[bitfield::bitfield(NonZero64)]
+        struct BitField64(Flags);
+        #[bitfield::bitfield(NonZero128)]
+        struct BitField128(Flags);
+        #[bitfield::bitfield(NonZeroSize)]
+        struct BitFieldSize(Flags);
+
+        assert_eq!(core::mem::size_of_val(&BitField8::new()), 1);
+        assert_eq!(core::mem::size_of_val(&Some(BitField8::new())), 1);
+        assert_eq!(core::mem::size_of_val(&BitField16::new()), 2);
+        assert_eq!(core::mem::size_of_val(&Some(BitField16::new())), 2);
+        assert_eq!(core::mem::size_of_val(&BitField32::new()), 4);
+        assert_eq!(core::mem::size_of_val(&Some(BitField32::new())), 4);
+        assert_eq!(core::mem::size_of_val(&BitField64::new()), 8);
+        assert_eq!(core::mem::size_of_val(&Some(BitField64::new())), 8);
+        assert_eq!(core::mem::size_of_val(&BitField128::new()), 16);
+        assert_eq!(core::mem::size_of_val(&Some(BitField128::new())), 16);
+        #[cfg(target_pointer_width = "8")]
+        {
+            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 1);
+            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 1);
+        }
+        #[cfg(target_pointer_width = "16")]
+        {
+            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 2);
+            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 2);
+        }
+        #[cfg(target_pointer_width = "32")]
+        {
+            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 4);
+            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 4);
+        }
+        #[cfg(target_pointer_width = "64")]
+        {
+            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 8);
+            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 8);
+        }
+        #[cfg(target_pointer_width = "128")]
+        {
+            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 16);
+            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 16);
+        }
     }
 
     #[test]

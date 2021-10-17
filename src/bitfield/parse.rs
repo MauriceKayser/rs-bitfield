@@ -4,30 +4,47 @@ use syn::spanned::Spanned;
 
 impl syn::parse::Parse for super::Attribute {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        const BITS_MESSAGE: &str = "expected either `8`, `16`, `32`, `64`, `128`, or `size`";
-
         // Read the amount of bits the field should store.
-        let (size, bits) = if input.peek(syn::LitInt) {
+        let (base_type, primitive_type, bits, is_non_zero) = if input.peek(syn::LitInt) {
             // Parse integer literals.
-            input.parse::<syn::LitInt>().and_then(|lit| {
-                let bits = lit.base10_parse().map_err(|e| syn::Error::new(
-                    e.span(), BITS_MESSAGE
-                ))?;
-                match bits {
+            input.parse::<syn::LitInt>()
+                .map_err(|e| e.span())
+                .and_then(|lit| lit.base10_parse().map(|bits| (bits, lit.span())).map_err(|e| e.span()))
+                .and_then(|(bits, span)| match bits {
                     8 | 16 | 32 | 64 | 128 => Ok((
-                        syn::Ident::new(&format!("u{}", bits), lit.span()), Some(bits)
+                        std::borrow::Cow::Owned(format!("u{}", bits)),
+                        std::borrow::Cow::Owned(format!("u{}", bits)),
+                        span, Some(bits), false
                     )),
-                    _ => Err(syn::Error::new(lit.span(), BITS_MESSAGE))
-                }
-            })
+                    _ => Err(span)
+                })
         } else {
-            // Parse "size".
-            input.parse::<syn::Ident>().and_then(|ident| if ident == "size" {
-                Ok((syn::Ident::new("usize", ident.span()), None))
-            } else {
-                Err(syn::Error::new(ident.span(), BITS_MESSAGE))
-            })
-        }?;
+            input.parse::<syn::Ident>()
+                .map_err(|e| e.span())
+                .and_then(|type_identifier| match type_identifier.to_string().as_ref() {
+                    "size" => Ok(("usize", "usize", None, false)),
+                    "NonZero8" => Ok(("core::num::NonZeroU8", "u8", Some(8), true)),
+                    "NonZero16" => Ok(("core::num::NonZeroU16", "u16", Some(16), true)),
+                    "NonZero32" => Ok(("core::num::NonZeroU32", "u32", Some(32), true)),
+                    "NonZero64" => Ok(("core::num::NonZeroU64", "u64", Some(64), true)),
+                    "NonZero128" => Ok(("core::num::NonZeroU128", "u128", Some(128), true)),
+                    "NonZeroSize" => Ok(("core::num::NonZeroUsize", "usize", None, true)),
+                    _ => Err(type_identifier.span())
+                }.map(|d| (
+                    std::borrow::Cow::Borrowed(d.0),
+                    std::borrow::Cow::Borrowed(d.1),
+                    type_identifier.span(), d.2, d.3
+                )))
+        }.map(|(base_type, primitive_type, span, bits, is_non_zero)| {
+            let base_type: syn::Path = syn::parse_str(base_type.as_ref()).unwrap();
+            (
+                syn::parse2::<syn::Path>(quote::quote_spanned!(span => #base_type)).unwrap(),
+                syn::Ident::new(primitive_type.as_ref(), span),
+                bits, is_non_zero
+            )
+        }).map_err(|span| syn::Error::new(
+            span, "expected one of: `8`, `16`, `32`, `64`, `128`, `size`, `NonZero8`, `NonZero16`, `NonZero32`, `NonZero64`, `NonZero128`, `NonZeroSize`"
+        ))?;
 
         // Read the optional `allow_overlaps` identifier.
         let mut allow_overlaps = None;
@@ -43,7 +60,7 @@ impl syn::parse::Parse for super::Attribute {
             }
         }
 
-        Ok(Self { size, bits, allow_overlaps })
+        Ok(Self { base_type, primitive_type, bits, is_non_zero, allow_overlaps })
     }
 }
 
@@ -541,6 +558,7 @@ impl super::FieldDetails {
 #[cfg(test)]
 #[macro_use]
 pub(super) mod tests {
+    use quote::ToTokens;
     use super::super::*;
 
     macro_rules! filter_derive {
@@ -665,46 +683,105 @@ pub(super) mod tests {
     fn attribute_bits_size() {
         parse_invalid!(
             "Ident", "",
-            "expected either `8`, `16`, `32`, `64`, `128`, or `size`",
+            "expected one of: `8`, `16`, `32`, `64`, `128`, `size`, `NonZero8`, `NonZero16`, `NonZero32`, `NonZero64`, `NonZero128`, `NonZeroSize`",
             (1, 0), (1, 5)
         );
 
         parse_invalid!(
             "-1", "",
-            "expected either `8`, `16`, `32`, `64`, `128`, or `size`",
+            "expected one of: `8`, `16`, `32`, `64`, `128`, `size`, `NonZero8`, `NonZero16`, `NonZero32`, `NonZero64`, `NonZero128`, `NonZeroSize`",
             (1, 0), (1, 2)
         );
 
         parse_invalid!(
             "0", "",
-            "expected either `8`, `16`, `32`, `64`, `128`, or `size`",
+            "expected one of: `8`, `16`, `32`, `64`, `128`, `size`, `NonZero8`, `NonZero16`, `NonZero32`, `NonZero64`, `NonZero128`, `NonZeroSize`",
             (1, 0), (1, 1)
         );
 
         parse_invalid!(
             "1", "",
-            "expected either `8`, `16`, `32`, `64`, `128`, or `size`",
+            "expected one of: `8`, `16`, `32`, `64`, `128`, `size`, `NonZero8`, `NonZero16`, `NonZero32`, `NonZero64`, `NonZero128`, `NonZeroSize`",
             (1, 0), (1, 1)
         );
 
         let attr = parse_valid!("8", "struct A(A);").attr;
         assert_eq!(attr.bits, Some(8));
-        assert_eq!(attr.size, "u8");
+        assert_eq!(attr.base_type.to_token_stream().to_string(), "u8");
+        assert_eq!(attr.primitive_type, "u8");
+
+        let attr = parse_valid!("NonZero8", "struct A(A);").attr;
+        assert_eq!(attr.bits, Some(8));
+        assert_eq!(
+            attr.base_type.to_token_stream().to_string(),
+            quote::quote!(core::num::NonZeroU8).to_string()
+        );
+        assert_eq!(attr.primitive_type, "u8");
+
         let attr = parse_valid!("16", "struct A(A);").attr;
         assert_eq!(attr.bits, Some(16));
-        assert_eq!(attr.size, "u16");
+        assert_eq!(attr.base_type.to_token_stream().to_string(), "u16");
+        assert_eq!(attr.primitive_type, "u16");
+
+        let attr = parse_valid!("NonZero16", "struct A(A);").attr;
+        assert_eq!(attr.bits, Some(16));
+        assert_eq!(
+            attr.base_type.to_token_stream().to_string(),
+            quote::quote!(core::num::NonZeroU16).to_string()
+        );
+        assert_eq!(attr.primitive_type, "u16");
+
         let attr = parse_valid!("32", "struct A(A);").attr;
         assert_eq!(attr.bits, Some(32));
-        assert_eq!(attr.size, "u32");
+        assert_eq!(attr.base_type.to_token_stream().to_string(), "u32");
+        assert_eq!(attr.primitive_type, "u32");
+
+        let attr = parse_valid!("NonZero32", "struct A(A);").attr;
+        assert_eq!(attr.bits, Some(32));
+        assert_eq!(
+            attr.base_type.to_token_stream().to_string(),
+            quote::quote!(core::num::NonZeroU32).to_string()
+        );
+        assert_eq!(attr.primitive_type, "u32");
+
         let attr = parse_valid!("64", "struct A(A);").attr;
         assert_eq!(attr.bits, Some(64));
-        assert_eq!(attr.size, "u64");
+        assert_eq!(attr.base_type.to_token_stream().to_string(), "u64");
+        assert_eq!(attr.primitive_type, "u64");
+
+        let attr = parse_valid!("NonZero64", "struct A(A);").attr;
+        assert_eq!(attr.bits, Some(64));
+        assert_eq!(
+            attr.base_type.to_token_stream().to_string(),
+            quote::quote!(core::num::NonZeroU64).to_string()
+        );
+        assert_eq!(attr.primitive_type, "u64");
+
         let attr = parse_valid!("128", "struct A(A);").attr;
         assert_eq!(attr.bits, Some(128));
-        assert_eq!(attr.size, "u128");
+        assert_eq!(attr.base_type.to_token_stream().to_string(), "u128");
+        assert_eq!(attr.primitive_type, "u128");
+
+        let attr = parse_valid!("NonZero128", "struct A(A);").attr;
+        assert_eq!(attr.bits, Some(128));
+        assert_eq!(
+            attr.base_type.to_token_stream().to_string(),
+            quote::quote!(core::num::NonZeroU128).to_string()
+        );
+        assert_eq!(attr.primitive_type, "u128");
+
         let attr = parse_valid!("size", "struct A(A);").attr;
         assert_eq!(attr.bits, None);
-        assert_eq!(attr.size, "usize");
+        assert_eq!(attr.base_type.to_token_stream().to_string(), "usize");
+        assert_eq!(attr.primitive_type, "usize");
+
+        let attr = parse_valid!("NonZeroSize", "struct A(A);").attr;
+        assert_eq!(attr.bits, None);
+        assert_eq!(
+            attr.base_type.to_token_stream().to_string(),
+            quote::quote!(core::num::NonZeroUsize).to_string()
+        );
+        assert_eq!(attr.primitive_type, "usize");
     }
 
     #[test]
@@ -774,16 +851,30 @@ pub(super) mod tests {
         }
 
         assert_field!(parse_valid!("8", "struct A(#[field(bit = 2)] bool);").data, 0, 2, 1);
+        assert_field!(parse_valid!("NonZero8", "struct A(#[field(bit = 2)] bool);").data, 0, 2, 1);
         assert_field!(parse_valid!("16", "struct A(#[field(bit = 2)] i8);").data, 0, 2, 8);
+        assert_field!(parse_valid!("NonZero16", "struct A(#[field(bit = 2)] i8);").data, 0, 2, 8);
         assert_field!(parse_valid!("16", "struct A(#[field(bit = 2)] u8);").data, 0, 2, 8);
+        assert_field!(parse_valid!("NonZero16", "struct A(#[field(bit = 2)] u8);").data, 0, 2, 8);
         assert_field!(parse_valid!("32", "struct A(#[field(bit = 2)] i16);").data, 0, 2, 16);
+        assert_field!(parse_valid!("NonZero32", "struct A(#[field(bit = 2)] i16);").data, 0, 2, 16);
         assert_field!(parse_valid!("32", "struct A(#[field(bit = 2)] u16);").data, 0, 2, 16);
+        assert_field!(parse_valid!("NonZero32", "struct A(#[field(bit = 2)] u16);").data, 0, 2, 16);
         assert_field!(parse_valid!("64", "struct A(#[field(bit = 2)] i32);").data, 0, 2, 32);
+        assert_field!(parse_valid!("NonZero64", "struct A(#[field(bit = 2)] i32);").data, 0, 2, 32);
         assert_field!(parse_valid!("64", "struct A(#[field(bit = 2)] u32);").data, 0, 2, 32);
+        assert_field!(parse_valid!("NonZero64", "struct A(#[field(bit = 2)] u32);").data, 0, 2, 32);
         assert_field!(parse_valid!("128", "struct A(#[field(bit = 2)] i64);").data, 0, 2, 64);
+        assert_field!(parse_valid!("NonZero128", "struct A(#[field(bit = 2)] i64);").data, 0, 2, 64);
         assert_field!(parse_valid!("128", "struct A(#[field(bit = 2)] u64);").data, 0, 2, 64);
+        assert_field!(parse_valid!("NonZero128", "struct A(#[field(bit = 2)] u64);").data, 0, 2, 64);
         parse_invalid!(
             "128", "struct A(#[field(bit = 0)] u128);",
+            "field has the size of the whole bit field, use a plain `u128` instead",
+            (1, 27), (1, 31)
+        );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(bit = 0)] u128);",
             "field has the size of the whole bit field, use a plain `u128` instead",
             (1, 27), (1, 31)
         );
@@ -793,7 +884,17 @@ pub(super) mod tests {
             (1, 27), (1, 31)
         );
         parse_invalid!(
+            "NonZero128", "struct A(#[field(bit = 0)] i128);",
+            "field has the size of the whole bit field, use a plain `i128` instead",
+            (1, 27), (1, 31)
+        );
+        parse_invalid!(
             "8", "struct A(#[field(bit = 2)] B);",
+            "expected an explicit `size` value in the `field` attribute",
+            (1, 27), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(bit = 2)] B);",
             "expected an explicit `size` value in the `field` attribute",
             (1, 27), (1, 28)
         );
@@ -806,7 +907,21 @@ pub(super) mod tests {
         assert_field!(data, 2, 4, 1);
 
         let data = parse_valid!(
+            "NonZero8", "struct A { #[field(1, 2)] b: B, #[field(size = 1)] c: bool, #[field(size = 1)] d: bool }"
+        ).data;
+        assert_field!(data, 0, 1, 2);
+        assert_field!(data, 1, 3, 1);
+        assert_field!(data, 2, 4, 1);
+
+        let data = parse_valid!(
             "16", "struct A { b: bool, c: u8, d: bool }"
+        ).data;
+        assert_field!(data, 0, 0, 1);
+        assert_field!(data, 1, 1, 8);
+        assert_field!(data, 2, 9, 1);
+
+        let data = parse_valid!(
+            "NonZero16", "struct A { b: bool, c: u8, d: bool }"
         ).data;
         assert_field!(data, 0, 0, 1);
         assert_field!(data, 1, 1, 8);
@@ -1241,6 +1356,26 @@ pub(super) mod tests {
         parse_valid!("8", "struct A(#[field(1, 7)] A);");
 
         parse_invalid!(
+            "NonZero8", "struct A(#[field(8, 1)] A);",
+            "out of bounds, must not exceed 8 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 18)
+        );
+
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(0, 9)] A);",
+            "out of bounds, must not exceed 8 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 20), (1, 21)
+        );
+
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(1, 8)] A);",
+            "out of bounds, must not exceed 8 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 21)
+        );
+
+        parse_valid!("NonZero8", "struct A(#[field(1, 7)] A);");
+
+        parse_invalid!(
             "16", "struct A(#[field(16, 1)] A);",
             "out of bounds, must not exceed 16 bits, as stated in the `#[bitfield(bits)]` attribute",
             (1, 17), (1, 19)
@@ -1259,6 +1394,26 @@ pub(super) mod tests {
         );
 
         parse_valid!("16", "struct A(#[field(1, 15)] A);");
+
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(16, 1)] A);",
+            "out of bounds, must not exceed 16 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 19)
+        );
+
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(0, 17)] A);",
+            "out of bounds, must not exceed 16 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 20), (1, 22)
+        );
+
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(1, 16)] A);",
+            "out of bounds, must not exceed 16 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 22)
+        );
+
+        parse_valid!("NonZero16", "struct A(#[field(1, 15)] A);");
 
         parse_invalid!(
             "32", "struct A(#[field(32, 1)] A);",
@@ -1281,6 +1436,26 @@ pub(super) mod tests {
         parse_valid!("32", "struct A(#[field(1, 31)] A);");
 
         parse_invalid!(
+            "NonZero32", "struct A(#[field(32, 1)] A);",
+            "out of bounds, must not exceed 32 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 19)
+        );
+
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(0, 33)] A);",
+            "out of bounds, must not exceed 32 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 20), (1, 22)
+        );
+
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 32)] A);",
+            "out of bounds, must not exceed 32 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 22)
+        );
+
+        parse_valid!("NonZero32", "struct A(#[field(1, 31)] A);");
+
+        parse_invalid!(
             "64", "struct A(#[field(64, 1)] A);",
             "out of bounds, must not exceed 64 bits, as stated in the `#[bitfield(bits)]` attribute",
             (1, 17), (1, 19)
@@ -1301,6 +1476,26 @@ pub(super) mod tests {
         parse_valid!("64", "struct A(#[field(1, 63)] A);");
 
         parse_invalid!(
+            "NonZero64", "struct A(#[field(64, 1)] A);",
+            "out of bounds, must not exceed 64 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 19)
+        );
+
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(0, 65)] A);",
+            "out of bounds, must not exceed 64 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 20), (1, 22)
+        );
+
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 64)] A);",
+            "out of bounds, must not exceed 64 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 22)
+        );
+
+        parse_valid!("NonZero64", "struct A(#[field(1, 63)] A);");
+
+        parse_invalid!(
             "128", "struct A(#[field(128, 1)] A);",
             "out of bounds, must not exceed 128 bits, as stated in the `#[bitfield(bits)]` attribute",
             (1, 17), (1, 20)
@@ -1319,24 +1514,59 @@ pub(super) mod tests {
         );
 
         parse_valid!("128", "struct A(#[field(1, 127)] A);");
+
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(128, 1)] A);",
+            "out of bounds, must not exceed 128 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 20)
+        );
+
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(0, 129)] A);",
+            "out of bounds, must not exceed 128 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 20), (1, 23)
+        );
+
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 128)] A);",
+            "out of bounds, must not exceed 128 bits, as stated in the `#[bitfield(bits)]` attribute",
+            (1, 17), (1, 23)
+        );
+
+        parse_valid!("NonZero128", "struct A(#[field(1, 127)] A);");
     }
 
     #[test]
     fn validate_capacity() {
         parse_valid!("8", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero8", "struct A(#[field(1, 7)] u8);");
 
         parse_valid!("16", "struct A(#[field(1, 8)] u8);");
+        parse_valid!("NonZero16", "struct A(#[field(1, 8)] u8);");
         parse_invalid!(
             "16", "struct A(#[field(1, 8)] u16);",
             "field only uses 8 bits, use `u8` instead",
             (1, 24), (1, 27)
         );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(1, 8)] u16);",
+            "field only uses 8 bits, use `u8` instead",
+            (1, 24), (1, 27)
+        );
         parse_valid!("16", "struct A(#[field(1, 15)] u16);");
+        parse_valid!("NonZero16", "struct A(#[field(1, 15)] u16);");
 
         parse_valid!("32", "struct A(#[field(1, 8)] u8);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 8)] u8);");
         parse_valid!("32", "struct A(#[field(1, 16)] u16);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 16)] u16);");
         parse_invalid!(
             "32", "struct A(#[field(1, 8)] u16);",
+            "field only uses 8 bits, use `u8` instead",
+            (1, 24), (1, 27)
+        );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 8)] u16);",
             "field only uses 8 bits, use `u8` instead",
             (1, 24), (1, 27)
         );
@@ -1345,13 +1575,27 @@ pub(super) mod tests {
             "field only uses 16 bits, use `u16` instead",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 16)] u32);",
+            "field only uses 16 bits, use `u16` instead",
+            (1, 25), (1, 28)
+        );
         parse_valid!("32", "struct A(#[field(1, 31)] u32);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 31)] u32);");
 
         parse_valid!("64", "struct A(#[field(1, 8)] u8);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 8)] u8);");
         parse_valid!("64", "struct A(#[field(1, 16)] u16);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 16)] u16);");
         parse_valid!("64", "struct A(#[field(1, 32)] u32);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 32)] u32);");
         parse_invalid!(
             "64", "struct A(#[field(1, 8)] u16);",
+            "field only uses 8 bits, use `u8` instead",
+            (1, 24), (1, 27)
+        );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 8)] u16);",
             "field only uses 8 bits, use `u8` instead",
             (1, 24), (1, 27)
         );
@@ -1361,18 +1605,38 @@ pub(super) mod tests {
             (1, 25), (1, 28)
         );
         parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 16)] u32);",
+            "field only uses 16 bits, use `u16` instead",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
             "64", "struct A(#[field(1, 32)] u64);",
             "field only uses 32 bits, use `u32` instead",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 32)] u64);",
+            "field only uses 32 bits, use `u32` instead",
+            (1, 25), (1, 28)
+        );
         parse_valid!("64", "struct A(#[field(1, 63)] u64);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 63)] u64);");
 
         parse_valid!("128", "struct A(#[field(1, 8)] u8);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 8)] u8);");
         parse_valid!("128", "struct A(#[field(1, 16)] u16);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 16)] u16);");
         parse_valid!("128", "struct A(#[field(1, 32)] u32);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 32)] u32);");
         parse_valid!("128", "struct A(#[field(1, 64)] u64);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 64)] u64);");
         parse_invalid!(
             "128", "struct A(#[field(1, 8)] u16);",
+            "field only uses 8 bits, use `u8` instead",
+            (1, 24), (1, 27)
+        );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 8)] u16);",
             "field only uses 8 bits, use `u8` instead",
             (1, 24), (1, 27)
         );
@@ -1382,7 +1646,17 @@ pub(super) mod tests {
             (1, 25), (1, 28)
         );
         parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 16)] u32);",
+            "field only uses 16 bits, use `u16` instead",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
             "128", "struct A(#[field(1, 32)] u64);",
+            "field only uses 32 bits, use `u32` instead",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 32)] u64);",
             "field only uses 32 bits, use `u32` instead",
             (1, 25), (1, 28)
         );
@@ -1391,7 +1665,13 @@ pub(super) mod tests {
             "field only uses 64 bits, use `u64` instead",
             (1, 25), (1, 29)
         );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 64)] u128);",
+            "field only uses 64 bits, use `u64` instead",
+            (1, 25), (1, 29)
+        );
         parse_valid!("128", "struct A(#[field(1, 127)] u128);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 127)] u128);");
     }
 
     #[test]
@@ -1401,19 +1681,36 @@ pub(super) mod tests {
             "type is smaller than the specified size of 2 bits",
             (1, 24), (1, 28)
         );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(1, 2)] bool);",
+            "type is smaller than the specified size of 2 bits",
+            (1, 24), (1, 28)
+        );
 
         parse_valid!("8", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero8", "struct A(#[field(1, 7)] u8);");
 
         parse_invalid!(
             "16", "struct A(#[field(1, 15)] u8);",
             "type is smaller than the specified size of 15 bits",
             (1, 25), (1, 27)
         );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(1, 15)] u8);",
+            "type is smaller than the specified size of 15 bits",
+            (1, 25), (1, 27)
+        );
 
         parse_valid!("16", "struct A(#[field(1, 15)] u16);");
+        parse_valid!("NonZero16", "struct A(#[field(1, 15)] u16);");
 
         parse_invalid!(
             "32", "struct A(#[field(1, 31)] u8);",
+            "type is smaller than the specified size of 31 bits",
+            (1, 25), (1, 27)
+        );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 31)] u8);",
             "type is smaller than the specified size of 31 bits",
             (1, 25), (1, 27)
         );
@@ -1423,11 +1720,22 @@ pub(super) mod tests {
             "type is smaller than the specified size of 31 bits",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 31)] u16);",
+            "type is smaller than the specified size of 31 bits",
+            (1, 25), (1, 28)
+        );
 
         parse_valid!("32", "struct A(#[field(1, 31)] u32);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 31)] u32);");
 
         parse_invalid!(
             "64", "struct A(#[field(1, 63)] u8);",
+            "type is smaller than the specified size of 63 bits",
+            (1, 25), (1, 27)
+        );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 63)] u8);",
             "type is smaller than the specified size of 63 bits",
             (1, 25), (1, 27)
         );
@@ -1437,17 +1745,33 @@ pub(super) mod tests {
             "type is smaller than the specified size of 63 bits",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 63)] u16);",
+            "type is smaller than the specified size of 63 bits",
+            (1, 25), (1, 28)
+        );
 
         parse_invalid!(
             "64", "struct A(#[field(1, 63)] u32);",
             "type is smaller than the specified size of 63 bits",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 63)] u32);",
+            "type is smaller than the specified size of 63 bits",
+            (1, 25), (1, 28)
+        );
 
         parse_valid!("64", "struct A(#[field(1, 63)] u64);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 63)] u64);");
 
         parse_invalid!(
             "128", "struct A(#[field(1, 127)] u8);",
+            "type is smaller than the specified size of 127 bits",
+            (1, 26), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 127)] u8);",
             "type is smaller than the specified size of 127 bits",
             (1, 26), (1, 28)
         );
@@ -1457,9 +1781,19 @@ pub(super) mod tests {
             "type is smaller than the specified size of 127 bits",
             (1, 26), (1, 29)
         );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 127)] u16);",
+            "type is smaller than the specified size of 127 bits",
+            (1, 26), (1, 29)
+        );
 
         parse_invalid!(
             "128", "struct A(#[field(1, 127)] u32);",
+            "type is smaller than the specified size of 127 bits",
+            (1, 26), (1, 29)
+        );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 127)] u32);",
             "type is smaller than the specified size of 127 bits",
             (1, 26), (1, 29)
         );
@@ -1469,8 +1803,14 @@ pub(super) mod tests {
             "type is smaller than the specified size of 127 bits",
             (1, 26), (1, 29)
         );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 127)] u64);",
+            "type is smaller than the specified size of 127 bits",
+            (1, 26), (1, 29)
+        );
 
         parse_valid!("128", "struct A(#[field(1, 127)] u128);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 127)] u128);");
     }
 
     #[test]
@@ -1497,19 +1837,36 @@ pub(super) mod tests {
             "type is smaller than the specified size of 9 bits",
             (1, 24), (1, 26)
         );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(0, 9)] i8);",
+            "type is smaller than the specified size of 9 bits",
+            (1, 24), (1, 26)
+        );
 
         parse_invalid!(
             "8", "struct A(#[field(1, 7)] i8);",
             "a signed `i8` with a size of `7` bits can not store negative numbers, use either `u8` or `#[field(size = 8)]`",
             (1, 24), (1, 26)
         );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(1, 7)] i8);",
+            "a signed `i8` with a size of `7` bits can not store negative numbers, use either `u8` or `#[field(size = 8)]`",
+            (1, 24), (1, 26)
+        );
 
         parse_valid!("16", "struct A(#[field(0, 8)] i8);");
+        parse_valid!("NonZero16", "struct A(#[field(0, 8)] i8);");
 
         parse_valid!("8", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero8", "struct A(#[field(1, 7)] u8);");
 
         parse_invalid!(
             "32", "struct A(#[field(0, 17)] i16);",
+            "type is smaller than the specified size of 17 bits",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(0, 17)] i16);",
             "type is smaller than the specified size of 17 bits",
             (1, 25), (1, 28)
         );
@@ -1519,13 +1876,25 @@ pub(super) mod tests {
             "a signed `i16` with a size of `15` bits can not store negative numbers, use either `u16` or `#[field(size = 16)]`",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(1, 15)] i16);",
+            "a signed `i16` with a size of `15` bits can not store negative numbers, use either `u16` or `#[field(size = 16)]`",
+            (1, 25), (1, 28)
+        );
 
         parse_valid!("32", "struct A(#[field(0, 16)] i16);");
+        parse_valid!("NonZero32", "struct A(#[field(0, 16)] i16);");
 
         parse_valid!("16", "struct A(#[field(1, 15)] u16);");
+        parse_valid!("NonZero16", "struct A(#[field(1, 15)] u16);");
 
         parse_invalid!(
             "64", "struct A(#[field(0, 33)] i32);",
+            "type is smaller than the specified size of 33 bits",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(0, 33)] i32);",
             "type is smaller than the specified size of 33 bits",
             (1, 25), (1, 28)
         );
@@ -1535,13 +1904,25 @@ pub(super) mod tests {
             "a signed `i32` with a size of `31` bits can not store negative numbers, use either `u32` or `#[field(size = 32)]`",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 31)] i32);",
+            "a signed `i32` with a size of `31` bits can not store negative numbers, use either `u32` or `#[field(size = 32)]`",
+            (1, 25), (1, 28)
+        );
 
         parse_valid!("64", "struct A(#[field(0, 32)] i32);");
+        parse_valid!("NonZero64", "struct A(#[field(0, 32)] i32);");
 
         parse_valid!("32", "struct A(#[field(1, 31)] u32);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 31)] u32);");
 
         parse_invalid!(
             "128", "struct A(#[field(0, 65)] i64);",
+            "type is smaller than the specified size of 65 bits",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(0, 65)] i64);",
             "type is smaller than the specified size of 65 bits",
             (1, 25), (1, 28)
         );
@@ -1551,14 +1932,26 @@ pub(super) mod tests {
             "a signed `i64` with a size of `63` bits can not store negative numbers, use either `u64` or `#[field(size = 64)]`",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 63)] i64);",
+            "a signed `i64` with a size of `63` bits can not store negative numbers, use either `u64` or `#[field(size = 64)]`",
+            (1, 25), (1, 28)
+        );
 
         parse_valid!("128", "struct A(#[field(0, 64)] i64);");
+        parse_valid!("NonZero128", "struct A(#[field(0, 64)] i64);");
 
         parse_valid!("64", "struct A(#[field(1, 63)] u64);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 63)] u64);");
 
         /* Not possible:
         parse_invalid!(
             "256", "struct A(#[field(0, 129)] i128);",
+            "type is smaller than the specified size of 129 bits",
+            (1, 26), (1, 30)
+        );
+        parse_invalid!(
+            "NonZero256", "struct A(#[field(0, 129)] i128);",
             "type is smaller than the specified size of 129 bits",
             (1, 26), (1, 30)
         );
@@ -1569,18 +1962,31 @@ pub(super) mod tests {
             "a signed `i128` with a size of `127` bits can not store negative numbers, use either `u128` or `#[field(size = 128)]`",
             (1, 26), (1, 30)
         );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(1, 127)] i128);",
+            "a signed `i128` with a size of `127` bits can not store negative numbers, use either `u128` or `#[field(size = 128)]`",
+            (1, 26), (1, 30)
+        );
 
         // Not possible: parse_valid!("256", "struct A(#[field(0, 128)] i128);");
+        // Not possible: parse_valid!("NonZero256", "struct A(#[field(0, 128)] i128);");
 
         parse_valid!("128", "struct A(#[field(1, 127)] u128);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 127)] u128);");
     }
 
     #[test]
     fn validate_primitive_size() {
         parse_valid!("8", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero8", "struct A(#[field(1, 7)] u8);");
 
         parse_invalid!(
             "8", "struct A(#[field(1, 7)] u16);",
+            "bigger than the size of the bit field, use `u8` instead",
+            (1, 24), (1, 27)
+        );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(1, 7)] u16);",
             "bigger than the size of the bit field, use `u8` instead",
             (1, 24), (1, 27)
         );
@@ -1590,9 +1996,19 @@ pub(super) mod tests {
             "bigger than the size of the bit field, use `u8` instead",
             (1, 24), (1, 27)
         );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(1, 7)] u32);",
+            "bigger than the size of the bit field, use `u8` instead",
+            (1, 24), (1, 27)
+        );
 
         parse_invalid!(
             "8", "struct A(#[field(1, 7)] u64);",
+            "bigger than the size of the bit field, use `u8` instead",
+            (1, 24), (1, 27)
+        );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(1, 7)] u64);",
             "bigger than the size of the bit field, use `u8` instead",
             (1, 24), (1, 27)
         );
@@ -1602,13 +2018,25 @@ pub(super) mod tests {
             "bigger than the size of the bit field, use `u8` instead",
             (1, 24), (1, 28)
         );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(1, 7)] u128);",
+            "bigger than the size of the bit field, use `u8` instead",
+            (1, 24), (1, 28)
+        );
 
         parse_valid!("16", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero16", "struct A(#[field(1, 7)] u8);");
 
         parse_valid!("16", "struct A(#[field(1, 15)] u16);");
+        parse_valid!("NonZero16", "struct A(#[field(1, 15)] u16);");
 
         parse_invalid!(
             "16", "struct A(#[field(1, 15)] u32);",
+            "bigger than the size of the bit field, use `u16` instead",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(1, 15)] u32);",
             "bigger than the size of the bit field, use `u16` instead",
             (1, 25), (1, 28)
         );
@@ -1618,21 +2046,39 @@ pub(super) mod tests {
             "bigger than the size of the bit field, use `u16` instead",
             (1, 25), (1, 28)
         );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(1, 15)] u64);",
+            "bigger than the size of the bit field, use `u16` instead",
+            (1, 25), (1, 28)
+        );
 
         parse_invalid!(
             "16", "struct A(#[field(1, 15)] u128);",
             "bigger than the size of the bit field, use `u16` instead",
             (1, 25), (1, 29)
         );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(1, 15)] u128);",
+            "bigger than the size of the bit field, use `u16` instead",
+            (1, 25), (1, 29)
+        );
 
         parse_valid!("32", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 7)] u8);");
 
         parse_valid!("32", "struct A(#[field(1, 15)] u16);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 15)] u16);");
 
         parse_valid!("32", "struct A(#[field(1, 31)] u32);");
+        parse_valid!("NonZero32", "struct A(#[field(1, 31)] u32);");
 
         parse_invalid!(
             "32", "struct A(#[field(1, 31)] u64);",
+            "bigger than the size of the bit field, use `u32` instead",
+            (1, 25), (1, 28)
+        );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 31)] u64);",
             "bigger than the size of the bit field, use `u32` instead",
             (1, 25), (1, 28)
         );
@@ -1642,30 +2088,49 @@ pub(super) mod tests {
             "bigger than the size of the bit field, use `u32` instead",
             (1, 25), (1, 29)
         );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(1, 31)] u128);",
+            "bigger than the size of the bit field, use `u32` instead",
+            (1, 25), (1, 29)
+        );
 
         parse_valid!("64", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 7)] u8);");
 
         parse_valid!("64", "struct A(#[field(1, 15)] u16);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 15)] u16);");
 
         parse_valid!("64", "struct A(#[field(1, 31)] u32);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 31)] u32);");
 
         parse_valid!("64", "struct A(#[field(1, 63)] u64);");
+        parse_valid!("NonZero64", "struct A(#[field(1, 63)] u64);");
 
         parse_invalid!(
             "64", "struct A(#[field(1, 63)] u128);",
             "bigger than the size of the bit field, use `u64` instead",
             (1, 25), (1, 29)
         );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(1, 63)] u128);",
+            "bigger than the size of the bit field, use `u64` instead",
+            (1, 25), (1, 29)
+        );
 
         parse_valid!("128", "struct A(#[field(1, 7)] u8);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 7)] u8);");
 
         parse_valid!("128", "struct A(#[field(1, 15)] u16);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 15)] u16);");
 
         parse_valid!("128", "struct A(#[field(1, 31)] u32);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 31)] u32);");
 
         parse_valid!("128", "struct A(#[field(1, 63)] u64);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 63)] u64);");
 
         parse_valid!("128", "struct A(#[field(1, 127)] u128);");
+        parse_valid!("NonZero128", "struct A(#[field(1, 127)] u128);");
     }
 
     #[test]
@@ -1675,9 +2140,19 @@ pub(super) mod tests {
             "field has the size of the whole bit field, use a plain `A` instead",
             (1, 20), (1, 21)
         );
+        parse_invalid!(
+            "NonZero8", "struct A(#[field(0, 8)] A);",
+            "field has the size of the whole bit field, use a plain `A` instead",
+            (1, 20), (1, 21)
+        );
 
         parse_invalid!(
             "16", "struct A(#[field(0, 16)] A);",
+            "field has the size of the whole bit field, use a plain `A` instead",
+            (1, 20), (1, 22)
+        );
+        parse_invalid!(
+            "NonZero16", "struct A(#[field(0, 16)] A);",
             "field has the size of the whole bit field, use a plain `A` instead",
             (1, 20), (1, 22)
         );
@@ -1687,15 +2162,30 @@ pub(super) mod tests {
             "field has the size of the whole bit field, use a plain `A` instead",
             (1, 20), (1, 22)
         );
+        parse_invalid!(
+            "NonZero32", "struct A(#[field(0, 32)] A);",
+            "field has the size of the whole bit field, use a plain `A` instead",
+            (1, 20), (1, 22)
+        );
 
         parse_invalid!(
             "64", "struct A(#[field(0, 64)] A);",
             "field has the size of the whole bit field, use a plain `A` instead",
             (1, 20), (1, 22)
         );
+        parse_invalid!(
+            "NonZero64", "struct A(#[field(0, 64)] A);",
+            "field has the size of the whole bit field, use a plain `A` instead",
+            (1, 20), (1, 22)
+        );
 
         parse_invalid!(
             "128", "struct A(#[field(0, 128)] A);",
+            "field has the size of the whole bit field, use a plain `A` instead",
+            (1, 20), (1, 23)
+        );
+        parse_invalid!(
+            "NonZero128", "struct A(#[field(0, 128)] A);",
             "field has the size of the whole bit field, use a plain `A` instead",
             (1, 20), (1, 23)
         );
