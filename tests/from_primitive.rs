@@ -12,7 +12,6 @@ enum B {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::convert::TryInto;
 
     #[test]
     fn try_from() {

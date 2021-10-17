@@ -1,6 +1,6 @@
 [package]
 authors = ["Maurice Kayser"]
-edition = "2018"
+edition = "2021"
 keywords = ["bit", "bitfield", "bitfields", "bitflag", "bitflags", "bitmask", "field", "fields", "flag", "flags", "mask"]
 license = "MIT/Apache-2.0"
 name = "bitfield"
