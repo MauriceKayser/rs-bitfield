@@ -111,7 +111,7 @@ enum Access {
 #[derive(Copy, Clone, Debug, bitfield::Flags)]
 #[repr(u8)]
 enum Flag {
-    Guard = 9,
+    Guard = 8,
     NoCache,
     WriteCombine
     // Bits 11 - 28 are reserved.
@@ -157,7 +157,7 @@ fn main() {
         protection.0,
 
         (1 <<  6) + // access
-        (1 <<  9) + // Flag::Guard
+        (1 <<  8) + // Flag::Guard
         (1 << 10) + // Flag::NoCache
         (1 << 30)   // FlagAlloc::TargetsInvalid / FlagProtect::TargetsNoUpdate
     );

@@ -108,9 +108,9 @@ enum Control {
     ExactInstructionLocal,
     ExactInstructionGlobal,
     // Bit 10 is reserved.
-    RestrictedTransactionalMemory,
+    RestrictedTransactionalMemory = 11,
     // Bit 12 is reserved.
-    DebugRegisterAccess
+    DebugRegisterAccess = 13
     // Bits 14 - 15 are reserved.
 }
 
