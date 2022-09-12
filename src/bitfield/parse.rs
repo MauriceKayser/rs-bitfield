@@ -420,9 +420,9 @@ impl syn::parse::Parse for super::Data {
         if lookahead.peek(syn::token::Brace) {
             // Struct with named fields.
 
-            let braces = syn::group::parse_braces(input)?;
+            let braces_content; syn::braced!(braces_content in input);
             let entries: syn::punctuated::Punctuated<_, syn::Token![,]> =
-                braces.content.parse_terminated(super::EntryNamed::parse)?;
+                braces_content.parse_terminated(super::EntryNamed::parse)?;
 
             Ok(super::Data::Named(entries.into_pairs().map(
                 |p| p.into_value()
@@ -430,8 +430,8 @@ impl syn::parse::Parse for super::Data {
         } else if lookahead.peek(syn::token::Paren) {
             // Tuple struct.
 
-            let parens = syn::group::parse_parens(input)?;
-            let entry = parens.content.parse()?;
+            let parens_content; syn::parenthesized!(parens_content in input);
+            let entry = parens_content.parse()?;
             input.parse::<syn::Token![;]>()?;
 
             Ok(super::Data::Tuple(entry))
@@ -498,7 +498,7 @@ impl syn::parse::Parse for super::FieldDetails {
             }
         }
 
-        let buffer = syn::group::parse_parens(input)?.content;
+        let buffer; syn::parenthesized!(buffer in input);
 
         // Parse `bit = LitInt, signed?` or `size = LitInt, signed?`.
         if let Ok(ident) = buffer.parse::<syn::Ident>() {
