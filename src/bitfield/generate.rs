@@ -153,6 +153,7 @@ impl super::BitField {
                     return quote::quote! {
                         #(#attrs)*
                         /// Gets the value of the field.
+                        #[allow(unused)]
                         #[inline(always)]
                         #vis const fn #getter(&self) -> #ty {
                             self._bit(#bit)
@@ -160,6 +161,7 @@ impl super::BitField {
 
                         #(#attrs)*
                         /// Creates a copy of the bit field with the new value.
+                        #[allow(unused)]
                         #[inline(always)]
                         #[must_use = "leaves `self` unmodified and returns a modified variant"]
                         #vis const fn #setter(&self, value: #ty) -> Self {
@@ -168,6 +170,7 @@ impl super::BitField {
 
                         #(#attrs)*
                         /// Creates a copy of the bit field with the value of the field inverted.
+                        #[allow(unused)]
                         #[inline(always)]
                         #[must_use = "leaves `self` unmodified and returns a modified variant"]
                         #vis const fn #inverter(&self) -> Self {
@@ -178,6 +181,7 @@ impl super::BitField {
                     return quote::quote! {
                         #(#attrs)*
                         /// Gets the value of the field.
+                        #[allow(unused)]
                         #[inline(always)]
                         #vis const fn #getter(&self) -> #ty {
                             self._field(#bit, #size) as _
@@ -185,6 +189,7 @@ impl super::BitField {
 
                         #(#attrs)*
                         /// Creates a copy of the bit field with the new value.
+                        #[allow(unused)]
                         #[inline(always)]
                         #[must_use = "leaves `self` unmodified and returns a modified variant"]
                         #vis const fn #setter(&self, value: #ty) -> Self {
@@ -197,6 +202,7 @@ impl super::BitField {
                         quote::quote! {
                             #(#attrs)*
                             /// Gets the value of the field.
+                            #[allow(unused)]
                             #[inline(always)]
                             #vis const fn #getter(&self) -> #ty {
                                 self._field(#bit, #size) as _
@@ -208,6 +214,7 @@ impl super::BitField {
                             ///
                             /// Returns `None` if `value` is bigger than the specified amount of
                             /// bits for the field can store.
+                            #[allow(unused)]
                             #[inline(always)]
                             #[must_use = "leaves `self` unmodified and returns a modified variant"]
                             #vis const fn #setter(&self, value: #ty) -> Option<Self> {
@@ -223,6 +230,7 @@ impl super::BitField {
                         quote::quote! {
                             #(#attrs)*
                             /// Gets the value of the field.
+                            #[allow(unused)]
                             #[inline(always)]
                             #vis const fn #getter(&self) -> #ty {
                                 self._field(#bit, #size) as _
@@ -230,6 +238,7 @@ impl super::BitField {
 
                             #(#attrs)*
                             /// Creates a copy of the bit field with the new value.
+                            #[allow(unused)]
                             #[inline(always)]
                             #[must_use = "leaves `self` unmodified and returns a modified variant"]
                             #vis const fn #setter(&self, value: #ty) -> Self {
@@ -254,6 +263,7 @@ impl super::BitField {
                 #(#attrs)*
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
                 #[cfg(const_trait_impl)]
@@ -265,6 +275,7 @@ impl super::BitField {
                 #(#attrs)*
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 #vis fn #getter(&self) -> core::result::Result<#ty, #primitive> {
@@ -273,6 +284,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 #vis const fn #setter(&self, value: #ty) -> Self {
@@ -309,6 +321,7 @@ impl super::BitField {
             quote::quote! {
                 #(#attrs)*
                 /// Returns `true` if the specified `flag` is set.
+                #[allow(unused)]
                 #[inline(always)]
                 #vis const fn #getter(&self, flag: #ty) -> bool {
                     self._bit(flag as _)
@@ -316,6 +329,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Returns a bit mask of all possible flags.
+                #[allow(unused)]
                 #[inline(always)]
                 #vis const fn #getter_mask() -> #primitive_type {
                     let mut mask = 0;
@@ -332,6 +346,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Returns `true` if all flags are set.
+                #[allow(unused)]
                 #[inline(always)]
                 #vis const fn #getter_all(&self) -> bool {
                     (#destructor & Self::#getter_mask()) == Self::#getter_mask()
@@ -339,6 +354,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Returns `true` if any flag is set.
+                #[allow(unused)]
                 #[inline(always)]
                 #vis const fn #getter_any(&self) -> bool {
                     (#destructor & Self::#getter_mask()) != 0
@@ -346,6 +362,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Creates a copy of the bit field with the new value for the specified flag.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 #vis const fn #setter(&self, flag: #ty, value: bool) -> Self {
@@ -354,6 +371,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Creates a copy of the bit field with all flags set.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 #vis const fn #setter_all(&self) -> Self {
@@ -363,6 +381,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Creates a copy of the bit field with all flags cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 #vis const fn #setter_none(&self) -> Self {
@@ -372,6 +391,7 @@ impl super::BitField {
 
                 #(#attrs)*
                 /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 #vis const fn #inverter(&self, flag: #ty) -> Self {
@@ -1150,6 +1170,7 @@ impl super::BitField {
         quote::quote! {
             impl #ident {
                 /// Creates a new instance with all flags and fields cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #vis const fn new() -> Self {
                     #constructor
@@ -1323,6 +1344,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns `true` if the specified `flag` is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self, flag: A) -> bool {
                 self._bit(flag as _)
@@ -1331,6 +1353,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns a bit mask of all possible flags.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_mask() -> u8 {
                 let mut mask = 0;
@@ -1348,6 +1371,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns `true` if all flags are set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_all(&self) -> bool {
                 (self.0 & Self::test_get_mask()) == Self::test_get_mask()
@@ -1356,6 +1380,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns `true` if any flag is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_any(&self) -> bool {
                 (self.0 & Self::test_get_mask()) != 0
@@ -1364,6 +1389,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with the new value for the specified flag.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, flag: A, value: bool) -> Self {
@@ -1373,6 +1399,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with all flags set.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_all(&self) -> Self {
@@ -1383,6 +1410,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with all flags cleared.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
@@ -1393,6 +1421,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self, flag: A) -> Self {
@@ -1403,6 +1432,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns `true` if the specified `flag` is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self, flag: A) -> bool {
                 self._bit(flag as _)
@@ -1411,6 +1441,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns a bit mask of all possible flags.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_mask() -> u8 {
                 let mut mask = 0;
@@ -1428,6 +1459,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns `true` if all flags are set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_all(&self) -> bool {
                 (self.0.get() & Self::test_get_mask()) == Self::test_get_mask()
@@ -1436,6 +1468,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Returns `true` if any flag is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_any(&self) -> bool {
                 (self.0.get() & Self::test_get_mask()) != 0
@@ -1444,6 +1477,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with the new value for the specified flag.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, flag: A, value: bool) -> Self {
@@ -1453,6 +1487,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with all flags set.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_all(&self) -> Self {
@@ -1463,6 +1498,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with all flags cleared.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
@@ -1473,6 +1509,7 @@ mod tests {
             #[some_attribute1]
             #[some_attribute2]
             /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self, flag: A) -> Self {
@@ -1486,6 +1523,7 @@ mod tests {
                 #[some_attribute2]
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1496,6 +1534,7 @@ mod tests {
                 #[some_attribute2]
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1505,6 +1544,7 @@ mod tests {
                 #[some_attribute1]
                 #[some_attribute2]
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -1518,6 +1558,7 @@ mod tests {
                 #[some_attribute2]
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1528,6 +1569,7 @@ mod tests {
                 #[some_attribute2]
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1537,6 +1579,7 @@ mod tests {
                 #[some_attribute1]
                 #[some_attribute2]
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -1550,12 +1593,14 @@ mod tests {
     fn accessor_vis() {
         assert_accessor!("8", "struct A(pub A);", quote::quote! {
             /// Returns `true` if the specified `flag` is set.
+            #[allow(unused)]
             #[inline(always)]
             pub const fn test_get(&self, flag: A) -> bool {
                 self._bit(flag as _)
             }
 
             /// Returns a bit mask of all possible flags.
+            #[allow(unused)]
             #[inline(always)]
             pub const fn test_get_mask() -> u8 {
                 let mut mask = 0;
@@ -1571,18 +1616,21 @@ mod tests {
             }
 
             /// Returns `true` if all flags are set.
+            #[allow(unused)]
             #[inline(always)]
             pub const fn test_get_all(&self) -> bool {
                 (self.0 & Self::test_get_mask()) == Self::test_get_mask()
             }
 
             /// Returns `true` if any flag is set.
+            #[allow(unused)]
             #[inline(always)]
             pub const fn test_get_any(&self) -> bool {
                 (self.0 & Self::test_get_mask()) != 0
             }
 
             /// Creates a copy of the bit field with the new value for the specified flag.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             pub const fn test_set(&self, flag: A, value: bool) -> Self {
@@ -1590,6 +1638,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags set.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             pub const fn test_set_all(&self) -> Self {
@@ -1598,6 +1647,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags cleared.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             pub const fn test_set_none(&self) -> Self {
@@ -1606,6 +1656,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             pub const fn test_invert(&self, flag: A) -> Self {
@@ -1617,6 +1668,7 @@ mod tests {
             "8", "struct A(#[field(0, 1)] pub A);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 pub const fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1625,6 +1677,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 pub fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1632,6 +1685,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 pub const fn test_set(&self, value: A) -> Self {
@@ -1645,12 +1699,14 @@ mod tests {
     fn accessor_ty() {
         assert_accessor!("8", "struct A(B);", quote::quote! {
             /// Returns `true` if the specified `flag` is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self, flag: B) -> bool {
                 self._bit(flag as _)
             }
 
             /// Returns a bit mask of all possible flags.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_mask() -> u8 {
                 let mut mask = 0;
@@ -1666,18 +1722,21 @@ mod tests {
             }
 
             /// Returns `true` if all flags are set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_all(&self) -> bool {
                 (self.0 & Self::test_get_mask()) == Self::test_get_mask()
             }
 
             /// Returns `true` if any flag is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_any(&self) -> bool {
                 (self.0 & Self::test_get_mask()) != 0
             }
 
             /// Creates a copy of the bit field with the new value for the specified flag.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, flag: B, value: bool) -> Self {
@@ -1685,6 +1744,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags set.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_all(&self) -> Self {
@@ -1693,6 +1753,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags cleared.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
@@ -1701,6 +1762,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self, flag: B) -> Self {
@@ -1709,12 +1771,14 @@ mod tests {
         });
         assert_accessor!("NonZero8", "struct A(B);", quote::quote! {
             /// Returns `true` if the specified `flag` is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self, flag: B) -> bool {
                 self._bit(flag as _)
             }
 
             /// Returns a bit mask of all possible flags.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_mask() -> u8 {
                 let mut mask = 0;
@@ -1730,18 +1794,21 @@ mod tests {
             }
 
             /// Returns `true` if all flags are set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_all(&self) -> bool {
                 (self.0.get() & Self::test_get_mask()) == Self::test_get_mask()
             }
 
             /// Returns `true` if any flag is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_any(&self) -> bool {
                 (self.0.get() & Self::test_get_mask()) != 0
             }
 
             /// Creates a copy of the bit field with the new value for the specified flag.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, flag: B, value: bool) -> Self {
@@ -1749,6 +1816,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags set.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_all(&self) -> Self {
@@ -1757,6 +1825,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags cleared.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
@@ -1765,6 +1834,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self, flag: B) -> Self {
@@ -1776,6 +1846,7 @@ mod tests {
             "8", "struct A(#[field(0, 1)] B);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<B, u8> {
@@ -1784,6 +1855,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<B, u8> {
@@ -1791,6 +1863,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: B) -> Self {
@@ -1802,6 +1875,7 @@ mod tests {
             "NonZero8", "struct A(#[field(0, 1)] B);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<B, u8> {
@@ -1810,6 +1884,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<B, u8> {
@@ -1817,6 +1892,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: B) -> Self {
@@ -1830,12 +1906,14 @@ mod tests {
     fn accessor_field() {
         assert_accessor!("32", "struct A(A);", quote::quote! {
             /// Returns `true` if the specified `flag` is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self, flag: A) -> bool {
                 self._bit(flag as _)
             }
 
             /// Returns a bit mask of all possible flags.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_mask() -> u32 {
                 let mut mask = 0;
@@ -1851,18 +1929,21 @@ mod tests {
             }
 
             /// Returns `true` if all flags are set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_all(&self) -> bool {
                 (self.0 & Self::test_get_mask()) == Self::test_get_mask()
             }
 
             /// Returns `true` if any flag is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_any(&self) -> bool {
                 (self.0 & Self::test_get_mask()) != 0
             }
 
             /// Creates a copy of the bit field with the new value for the specified flag.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, flag: A, value: bool) -> Self {
@@ -1870,6 +1951,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags set.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_all(&self) -> Self {
@@ -1878,6 +1960,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags cleared.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
@@ -1886,6 +1969,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self, flag: A) -> Self {
@@ -1894,12 +1978,14 @@ mod tests {
         });
         assert_accessor!("NonZero32", "struct A(A);", quote::quote! {
             /// Returns `true` if the specified `flag` is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self, flag: A) -> bool {
                 self._bit(flag as _)
             }
 
             /// Returns a bit mask of all possible flags.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_mask() -> u32 {
                 let mut mask = 0;
@@ -1915,18 +2001,21 @@ mod tests {
             }
 
             /// Returns `true` if all flags are set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_all(&self) -> bool {
                 (self.0.get() & Self::test_get_mask()) == Self::test_get_mask()
             }
 
             /// Returns `true` if any flag is set.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get_any(&self) -> bool {
                 (self.0.get() & Self::test_get_mask()) != 0
             }
 
             /// Creates a copy of the bit field with the new value for the specified flag.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, flag: A, value: bool) -> Self {
@@ -1934,6 +2023,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags set.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_all(&self) -> Self {
@@ -1942,6 +2032,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with all flags cleared.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set_none(&self) -> Self {
@@ -1950,6 +2041,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with the value of the specified flag inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self, flag: A) -> Self {
@@ -1961,6 +2053,7 @@ mod tests {
             "32", "struct A(#[field(0, 1)] A);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1969,6 +2062,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1976,6 +2070,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -1987,6 +2082,7 @@ mod tests {
             "NonZero32", "struct A(#[field(0, 1)] A);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, u8> {
@@ -1995,6 +2091,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, u8> {
@@ -2002,6 +2099,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -2014,6 +2112,7 @@ mod tests {
             "32", "struct A(#[field(1, 9)] A);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, u16> {
@@ -2022,6 +2121,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, u16> {
@@ -2029,6 +2129,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -2040,6 +2141,7 @@ mod tests {
             "NonZero32", "struct A(#[field(1, 9)] A);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, u16> {
@@ -2048,6 +2150,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, u16> {
@@ -2055,6 +2158,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -2065,12 +2169,14 @@ mod tests {
 
         assert_accessor!("8", "struct A(#[field(2, 1)] bool);", quote::quote! {
             /// Gets the value of the field.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self) -> bool {
                 self._bit(2u8)
             }
 
             /// Creates a copy of the bit field with the new value.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: bool) -> Self {
@@ -2078,6 +2184,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with the value of the field inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self) -> Self {
@@ -2086,12 +2193,14 @@ mod tests {
         });
         assert_accessor!("NonZero8", "struct A(#[field(2, 1)] bool);", quote::quote! {
             /// Gets the value of the field.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self) -> bool {
                 self._bit(2u8)
             }
 
             /// Creates a copy of the bit field with the new value.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: bool) -> Self {
@@ -2099,6 +2208,7 @@ mod tests {
             }
 
             /// Creates a copy of the bit field with the value of the field inverted.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_invert(&self) -> Self {
@@ -2108,6 +2218,7 @@ mod tests {
 
         assert_accessor!("8", "struct A(#[field(3, 2)] u8);", quote::quote! {
             /// Gets the value of the field.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self) -> u8 {
                 self._field(3u8, 2u8) as _
@@ -2117,6 +2228,7 @@ mod tests {
             ///
             /// Returns `None` if `value` is bigger than the specified amount of
             /// bits for the field can store.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: u8) -> Option<Self> {
@@ -2127,6 +2239,7 @@ mod tests {
         });
         assert_accessor!("NonZero8", "struct A(#[field(3, 2)] u8);", quote::quote! {
             /// Gets the value of the field.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self) -> u8 {
                 self._field(3u8, 2u8) as _
@@ -2136,6 +2249,7 @@ mod tests {
             ///
             /// Returns `None` if `value` is bigger than the specified amount of
             /// bits for the field can store.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: u8) -> Option<Self> {
@@ -2147,12 +2261,14 @@ mod tests {
 
         assert_accessor!("16", "struct A(#[field(3, 8)] u8);", quote::quote! {
             /// Gets the value of the field.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self) -> u8 {
                 self._field(3u8, 8u8) as _
             }
 
             /// Creates a copy of the bit field with the new value.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: u8) -> Self {
@@ -2161,12 +2277,14 @@ mod tests {
         });
         assert_accessor!("NonZero16", "struct A(#[field(3, 8)] u8);", quote::quote! {
             /// Gets the value of the field.
+            #[allow(unused)]
             #[inline(always)]
             const fn test_get(&self) -> u8 {
                 self._field(3u8, 8u8) as _
             }
 
             /// Creates a copy of the bit field with the new value.
+            #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: u8) -> Self {
@@ -2181,6 +2299,7 @@ mod tests {
             "32", "struct A(#[field(0, 8)] A);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, u8> {
@@ -2189,6 +2308,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, u8> {
@@ -2196,6 +2316,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -2208,6 +2329,7 @@ mod tests {
             "32", "struct A(#[field(0, 8, signed)] A);", quote::quote! {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn test_get(&self) -> core::result::Result<A, i8> {
@@ -2216,6 +2338,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> core::result::Result<A, i8> {
@@ -2223,6 +2346,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
@@ -2234,12 +2358,14 @@ mod tests {
         assert_accessor!(
             "32", "struct A(u8);", quote::quote! {
                 /// Gets the value of the field.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn test_get(&self) -> u8 {
                     self._field(0u8, 8u8) as _
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: u8) -> Self {
@@ -2251,12 +2377,14 @@ mod tests {
         assert_accessor!(
             "32", "struct A(i8);", quote::quote! {
                 /// Gets the value of the field.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn test_get(&self) -> i8 {
                     self._field(0u8, 8u8) as _
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: i8) -> Self {
@@ -2271,12 +2399,14 @@ mod tests {
         assert_compare!(generate_accessors, "8", "struct A(B);", quote::quote! {
             impl A {
                 /// Returns `true` if the specified `flag` is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has(&self, flag: B) -> bool {
                     self._bit(flag as _)
                 }
 
                 /// Returns a bit mask of all possible flags.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has_mask() -> u8 {
                     let mut mask = 0;
@@ -2292,18 +2422,21 @@ mod tests {
                 }
 
                 /// Returns `true` if all flags are set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has_all(&self) -> bool {
                     (self.0 & Self::has_mask()) == Self::has_mask()
                 }
 
                 /// Returns `true` if any flag is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has_any(&self) -> bool {
                     (self.0 & Self::has_mask()) != 0
                 }
 
                 /// Creates a copy of the bit field with the new value for the specified flag.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, flag: B, value: bool) -> Self {
@@ -2311,6 +2444,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags set.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_all(&self) -> Self {
@@ -2319,6 +2453,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_none(&self) -> Self {
@@ -2327,6 +2462,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn invert(&self, flag: B) -> Self {
@@ -2337,12 +2473,14 @@ mod tests {
         assert_compare!(generate_accessors, "NonZero8", "struct A(B);", quote::quote! {
             impl A {
                 /// Returns `true` if the specified `flag` is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has(&self, flag: B) -> bool {
                     self._bit(flag as _)
                 }
 
                 /// Returns a bit mask of all possible flags.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has_mask() -> u8 {
                     let mut mask = 0;
@@ -2358,18 +2496,21 @@ mod tests {
                 }
 
                 /// Returns `true` if all flags are set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has_all(&self) -> bool {
                     (self.0.get() & Self::has_mask()) == Self::has_mask()
                 }
 
                 /// Returns `true` if any flag is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn has_any(&self) -> bool {
                     (self.0.get() & Self::has_mask()) != 0
                 }
 
                 /// Creates a copy of the bit field with the new value for the specified flag.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, flag: B, value: bool) -> Self {
@@ -2377,6 +2518,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags set.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_all(&self) -> Self {
@@ -2385,6 +2527,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_none(&self) -> Self {
@@ -2393,6 +2536,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn invert(&self, flag: B) -> Self {
@@ -2405,6 +2549,7 @@ mod tests {
             impl A {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn get(&self) -> core::result::Result<B, u8> {
@@ -2413,6 +2558,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn get(&self) -> core::result::Result<B, u8> {
@@ -2420,6 +2566,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: B) -> Self {
@@ -2431,6 +2578,7 @@ mod tests {
             impl A {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn get(&self) -> core::result::Result<B, u8> {
@@ -2439,6 +2587,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn get(&self) -> core::result::Result<B, u8> {
@@ -2446,6 +2595,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: B) -> Self {
@@ -2460,12 +2610,14 @@ mod tests {
         assert_compare!(generate_accessors, "8", "struct A { b: B }", quote::quote! {
             impl A {
                 /// Returns `true` if the specified `flag` is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b(&self, flag: B) -> bool {
                     self._bit(flag as _)
                 }
 
                 /// Returns a bit mask of all possible flags.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_mask() -> u8 {
                     let mut mask = 0;
@@ -2481,18 +2633,21 @@ mod tests {
                 }
 
                 /// Returns `true` if all flags are set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_all(&self) -> bool {
                     (self.0 & Self::b_mask()) == Self::b_mask()
                 }
 
                 /// Returns `true` if any flag is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_any(&self) -> bool {
                     (self.0 & Self::b_mask()) != 0
                 }
 
                 /// Creates a copy of the bit field with the new value for the specified flag.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, flag: B, value: bool) -> Self {
@@ -2500,6 +2655,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags set.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_all(&self) -> Self {
@@ -2508,6 +2664,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_none(&self) -> Self {
@@ -2516,6 +2673,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn invert_b(&self, flag: B) -> Self {
@@ -2526,12 +2684,14 @@ mod tests {
         assert_compare!(generate_accessors, "NonZero8", "struct A { b: B }", quote::quote! {
             impl A {
                 /// Returns `true` if the specified `flag` is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b(&self, flag: B) -> bool {
                     self._bit(flag as _)
                 }
 
                 /// Returns a bit mask of all possible flags.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_mask() -> u8 {
                     let mut mask = 0;
@@ -2547,18 +2707,21 @@ mod tests {
                 }
 
                 /// Returns `true` if all flags are set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_all(&self) -> bool {
                     (self.0.get() & Self::b_mask()) == Self::b_mask()
                 }
 
                 /// Returns `true` if any flag is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_any(&self) -> bool {
                     (self.0.get() & Self::b_mask()) != 0
                 }
 
                 /// Creates a copy of the bit field with the new value for the specified flag.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, flag: B, value: bool) -> Self {
@@ -2566,6 +2729,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags set.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_all(&self) -> Self {
@@ -2574,6 +2738,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_none(&self) -> Self {
@@ -2582,6 +2747,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn invert_b(&self, flag: B) -> Self {
@@ -2594,6 +2760,7 @@ mod tests {
             impl A {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn b(&self) -> core::result::Result<B, u8> {
@@ -2602,6 +2769,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn b(&self) -> core::result::Result<B, u8> {
@@ -2609,6 +2777,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: B) -> Self {
@@ -2620,6 +2789,7 @@ mod tests {
             impl A {
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn b(&self) -> core::result::Result<B, u8> {
@@ -2628,6 +2798,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn b(&self) -> core::result::Result<B, u8> {
@@ -2635,6 +2806,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: B) -> Self {
@@ -2646,12 +2818,14 @@ mod tests {
         assert_compare!(generate_accessors, "8", "struct A {b: B, #[field(0, 1)] c: C}", quote::quote! {
             impl A {
                 /// Returns `true` if the specified `flag` is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b(&self, flag: B) -> bool {
                     self._bit(flag as _)
                 }
 
                 /// Returns a bit mask of all possible flags.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_mask() -> u8 {
                     let mut mask = 0;
@@ -2667,18 +2841,21 @@ mod tests {
                 }
 
                 /// Returns `true` if all flags are set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_all(&self) -> bool {
                     (self.0 & Self::b_mask()) == Self::b_mask()
                 }
 
                 /// Returns `true` if any flag is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_any(&self) -> bool {
                     (self.0 & Self::b_mask()) != 0
                 }
 
                 /// Creates a copy of the bit field with the new value for the specified flag.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, flag: B, value: bool) -> Self {
@@ -2686,6 +2863,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags set.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_all(&self) -> Self {
@@ -2694,6 +2872,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_none(&self) -> Self {
@@ -2702,6 +2881,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn invert_b(&self, flag: B) -> Self {
@@ -2710,6 +2890,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn c(&self) -> core::result::Result<C, u8> {
@@ -2718,6 +2899,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn c(&self) -> core::result::Result<C, u8> {
@@ -2725,6 +2907,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_c(&self, value: C) -> Self {
@@ -2735,12 +2918,14 @@ mod tests {
         assert_compare!(generate_accessors, "NonZero8", "struct A {b: B, #[field(0, 1)] c: C}", quote::quote! {
             impl A {
                 /// Returns `true` if the specified `flag` is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b(&self, flag: B) -> bool {
                     self._bit(flag as _)
                 }
 
                 /// Returns a bit mask of all possible flags.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_mask() -> u8 {
                     let mut mask = 0;
@@ -2756,18 +2941,21 @@ mod tests {
                 }
 
                 /// Returns `true` if all flags are set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_all(&self) -> bool {
                     (self.0.get() & Self::b_mask()) == Self::b_mask()
                 }
 
                 /// Returns `true` if any flag is set.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b_any(&self) -> bool {
                     (self.0.get() & Self::b_mask()) != 0
                 }
 
                 /// Creates a copy of the bit field with the new value for the specified flag.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, flag: B, value: bool) -> Self {
@@ -2775,6 +2963,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags set.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_all(&self) -> Self {
@@ -2783,6 +2972,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with all flags cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b_none(&self) -> Self {
@@ -2791,6 +2981,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the value of the specified flag inverted.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn invert_b(&self, flag: B) -> Self {
@@ -2799,6 +2990,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
                 const fn c(&self) -> core::result::Result<C, u8> {
@@ -2807,6 +2999,7 @@ mod tests {
 
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
+                #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
                 fn c(&self) -> core::result::Result<C, u8> {
@@ -2814,6 +3007,7 @@ mod tests {
                 }
 
                 /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_c(&self, value: C) -> Self {
@@ -2825,6 +3019,7 @@ mod tests {
         assert_compare!(generate_accessors, "8", "struct A(#[field(0, 1)] u8);", quote::quote! {
             impl A {
                 /// Gets the value of the field.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn get(&self) -> u8 {
                     self._field(0u8, 1u8) as _
@@ -2834,6 +3029,7 @@ mod tests {
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
                 /// bits for the field can store.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: u8) -> Option<Self> {
@@ -2846,6 +3042,7 @@ mod tests {
         assert_compare!(generate_accessors, "NonZero8", "struct A(#[field(0, 1)] u8);", quote::quote! {
             impl A {
                 /// Gets the value of the field.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn get(&self) -> u8 {
                     self._field(0u8, 1u8) as _
@@ -2855,6 +3052,7 @@ mod tests {
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
                 /// bits for the field can store.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: u8) -> Option<Self> {
@@ -2868,6 +3066,7 @@ mod tests {
         assert_compare!(generate_accessors, "8", "struct A { #[field(0, 1)] b: u8 }", quote::quote! {
             impl A {
                 /// Gets the value of the field.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b(&self) -> u8 {
                     self._field(0u8, 1u8) as _
@@ -2877,6 +3076,7 @@ mod tests {
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
                 /// bits for the field can store.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: u8) -> Option<Self> {
@@ -2889,6 +3089,7 @@ mod tests {
         assert_compare!(generate_accessors, "NonZero8", "struct A { #[field(0, 1)] b: u8 }", quote::quote! {
             impl A {
                 /// Gets the value of the field.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn b(&self) -> u8 {
                     self._field(0u8, 1u8) as _
@@ -2898,6 +3099,7 @@ mod tests {
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
                 /// bits for the field can store.
+                #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: u8) -> Option<Self> {
@@ -4638,6 +4840,7 @@ mod tests {
         assert_compare!(generate_impl, "8", "struct A(A);", quote::quote! {
             impl A {
                 /// Creates a new instance with all flags and fields cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn new() -> Self {
                     Self(0)
@@ -4647,6 +4850,7 @@ mod tests {
         assert_compare!(generate_impl, "NonZero8", "struct A(A);", quote::quote! {
             impl A {
                 /// Creates a new instance with all flags and fields cleared.
+                #[allow(unused)]
                 #[inline(always)]
                 const fn new() -> Self {
                     Self(unsafe { core::num::NonZeroU8::new_unchecked(0) })
@@ -4730,6 +4934,7 @@ mod tests {
                 // implementation
                 impl A {
                     /// Creates a new instance with all flags and fields cleared.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn new() -> Self {
                         Self(0)
@@ -4798,6 +5003,7 @@ mod tests {
                 impl A {
                     #[doc = " D2 "]
                     /// Returns `true` if the specified `flag` is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b(&self, flag: B) -> bool {
                         self._bit(flag as _)
@@ -4805,6 +5011,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Returns a bit mask of all possible flags.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b_mask() -> u16 {
                         let mut mask = 0;
@@ -4821,6 +5028,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Returns `true` if all flags are set.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b_all(&self) -> bool {
                         (self.0 & Self::b_mask()) == Self::b_mask()
@@ -4828,6 +5036,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Returns `true` if any flag is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b_any(&self) -> bool {
                         (self.0 & Self::b_mask()) != 0
@@ -4835,6 +5044,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with the new value for the specified flag.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn set_b(&self, flag: B, value: bool) -> Self {
@@ -4843,6 +5053,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with all flags set.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn set_b_all(&self) -> Self {
@@ -4852,6 +5063,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with all flags cleared.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn set_b_none(&self) -> Self {
@@ -4861,6 +5073,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with the value of the specified flag inverted.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn invert_b(&self, flag: B) -> Self {
@@ -4870,6 +5083,7 @@ mod tests {
                     #[doc = " D3 "]
                     /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                     /// not be converted to the expected type.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[cfg(const_trait_impl)]
                     pub const fn c(&self) -> core::result::Result<C, u8> {
@@ -4879,6 +5093,7 @@ mod tests {
                     #[doc = " D3 "]
                     /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                     /// not be converted to the expected type.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[cfg(not(const_trait_impl))]
                     pub fn c(&self) -> core::result::Result<C, u8> {
@@ -4887,6 +5102,7 @@ mod tests {
 
                     #[doc = " D3 "]
                     /// Creates a copy of the bit field with the new value.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub const fn set_c(&self, value: C) -> Self {
@@ -4895,6 +5111,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns `true` if the specified `flag` is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d(&self, flag: D) -> bool {
                         self._bit(flag as _)
@@ -4902,6 +5119,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns a bit mask of all possible flags.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d_mask() -> u16 {
                         let mut mask = 0;
@@ -4918,6 +5136,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns `true` if all flags are set.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d_all(&self) -> bool {
                         (self.0 & Self::d_mask()) == Self::d_mask()
@@ -4925,6 +5144,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns `true` if any flag is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d_any(&self) -> bool {
                         (self.0 & Self::d_mask()) != 0
@@ -4932,6 +5152,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with the new value for the specified flag.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn set_d(&self, flag: D, value: bool) -> Self {
@@ -4940,6 +5161,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with all flags set.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn set_d_all(&self) -> Self {
@@ -4949,6 +5171,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with all flags cleared.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn set_d_none(&self) -> Self {
@@ -4958,6 +5181,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with the value of the specified flag inverted.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn invert_d(&self, flag: D) -> Self {
@@ -5189,6 +5413,7 @@ mod tests {
                 // implementation
                 impl A {
                     /// Creates a new instance with all flags and fields cleared.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn new() -> Self {
                         Self(unsafe { core::num::NonZeroU16::new_unchecked(0) })
@@ -5257,6 +5482,7 @@ mod tests {
                 impl A {
                     #[doc = " D2 "]
                     /// Returns `true` if the specified `flag` is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b(&self, flag: B) -> bool {
                         self._bit(flag as _)
@@ -5264,6 +5490,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Returns a bit mask of all possible flags.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b_mask() -> u16 {
                         let mut mask = 0;
@@ -5280,6 +5507,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Returns `true` if all flags are set.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b_all(&self) -> bool {
                         (self.0.get() & Self::b_mask()) == Self::b_mask()
@@ -5287,6 +5515,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Returns `true` if any flag is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     pub(crate) const fn b_any(&self) -> bool {
                         (self.0.get() & Self::b_mask()) != 0
@@ -5294,6 +5523,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with the new value for the specified flag.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn set_b(&self, flag: B, value: bool) -> Self {
@@ -5302,6 +5532,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with all flags set.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn set_b_all(&self) -> Self {
@@ -5311,6 +5542,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with all flags cleared.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn set_b_none(&self) -> Self {
@@ -5320,6 +5552,7 @@ mod tests {
 
                     #[doc = " D2 "]
                     /// Creates a copy of the bit field with the value of the specified flag inverted.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub(crate) const fn invert_b(&self, flag: B) -> Self {
@@ -5329,6 +5562,7 @@ mod tests {
                     #[doc = " D3 "]
                     /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                     /// not be converted to the expected type.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[cfg(const_trait_impl)]
                     pub const fn c(&self) -> core::result::Result<C, u8> {
@@ -5338,6 +5572,7 @@ mod tests {
                     #[doc = " D3 "]
                     /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                     /// not be converted to the expected type.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[cfg(not(const_trait_impl))]
                     pub fn c(&self) -> core::result::Result<C, u8> {
@@ -5346,6 +5581,7 @@ mod tests {
 
                     #[doc = " D3 "]
                     /// Creates a copy of the bit field with the new value.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub const fn set_c(&self, value: C) -> Self {
@@ -5354,6 +5590,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns `true` if the specified `flag` is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d(&self, flag: D) -> bool {
                         self._bit(flag as _)
@@ -5361,6 +5598,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns a bit mask of all possible flags.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d_mask() -> u16 {
                         let mut mask = 0;
@@ -5377,6 +5615,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns `true` if all flags are set.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d_all(&self) -> bool {
                         (self.0.get() & Self::d_mask()) == Self::d_mask()
@@ -5384,6 +5623,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Returns `true` if any flag is set.
+                    #[allow(unused)]
                     #[inline(always)]
                     const fn d_any(&self) -> bool {
                         (self.0.get() & Self::d_mask()) != 0
@@ -5391,6 +5631,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with the new value for the specified flag.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn set_d(&self, flag: D, value: bool) -> Self {
@@ -5399,6 +5640,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with all flags set.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn set_d_all(&self) -> Self {
@@ -5408,6 +5650,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with all flags cleared.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn set_d_none(&self) -> Self {
@@ -5417,6 +5660,7 @@ mod tests {
 
                     #[doc = " D4 "]
                     /// Creates a copy of the bit field with the value of the specified flag inverted.
+                    #[allow(unused)]
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     const fn invert_d(&self, flag: D) -> Self {
