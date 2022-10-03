@@ -6,17 +6,6 @@
 //! For more specific documentation look at the documentation of the macros, or at the files in
 //! `examples/*`.
 
-#[cfg(test)]
-#[macro_use]
-mod test;
-
-mod bitfield;
-#[macro_use]
-mod enumeration;
-mod field;
-mod flags;
-mod primitive;
-
 /// Generates an abstraction of a primitive type which tightly stores information in a bit field.
 ///
 /// # Example
@@ -1064,7 +1053,7 @@ pub fn bitfield(
     attribute: proc_macro::TokenStream,
     item: proc_macro::TokenStream
 ) -> proc_macro::TokenStream {
-    bitfield::BitField::parse(attribute.into(), item.into()).map_or_else(
+    bitfield_impl::bitfield::BitField::parse(attribute.into(), item.into()).map_or_else(
         |error| error.to_compile_error(),
         |field| field.into()
     ).into()
@@ -1178,7 +1167,7 @@ pub fn bitfield(
 /// ```
 #[proc_macro_derive(Field)]
 pub fn field(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    field::Field::parse(item.into())
+    bitfield_impl::field::Field::parse(item.into())
         .map(|field| field.into())
         .unwrap_or_else(|error| error.to_compile_error())
         .into()
@@ -1320,7 +1309,7 @@ pub fn field(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 /// ```
 #[proc_macro_derive(Flags)]
 pub fn flags(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    flags::Flags::parse(item.into())
+    bitfield_impl::flags::Flags::parse(item.into())
         .map(|flags| flags.into())
         .unwrap_or_else(|error| error.to_compile_error())
         .into()
@@ -1380,7 +1369,7 @@ pub fn flags(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 /// ```
 #[proc_macro_derive(FromPrimitive)]
 pub fn from_primitive(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
-    enumeration::Enumeration::parse(item.into())
+    bitfield_impl::enumeration::Enumeration::parse(item.into())
         .map(|enumeration| enumeration.generate_try_from())
         .unwrap_or_else(|error| error.to_compile_error())
         .into()
