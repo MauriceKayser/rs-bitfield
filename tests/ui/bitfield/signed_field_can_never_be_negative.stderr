@@ -1,7 +1,7 @@
 error[E0080]: evaluation of constant value failed
- --> $DIR/signed_field_can_never_be_negative.rs:5:1
+ --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:5:1
   |
 5 | #[bitfield::bitfield(16)]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^ attempt to compute `0_usize - 1_usize`, which would overflow
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^ the evaluated program panicked at 'Signed type in field 0 can never be negative', $DIR/tests/ui/bitfield/signed_field_can_never_be_negative.rs:5:1
   |
-  = note: this error originates in the attribute macro `bitfield::bitfield` (in Nightly builds, run with -Z macro-backtrace for more info)
+  = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
