@@ -1,7 +1,38 @@
 error[E0080]: evaluation of constant value failed
- --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:5:1
+ --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:6:28
   |
-5 | #[bitfield::bitfield(16)]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^ the evaluated program panicked at 'Signed type in field 0 can never be negative', $DIR/tests/ui/bitfield/signed_field_can_never_be_negative.rs:5:1
+6 | struct BitField(#[field(1, 7)] Field); // Needs a size of 8 instead of 7 to store negative values.
+  |                            ^ the evaluated program panicked at 'Signed type can never be negative', $DIR/tests/ui/bitfield/signed_field_can_never_be_negative.rs:6:28
   |
   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0271]: type mismatch resolving `<Field as TryFrom<u8>>::Error == u8`
+ --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:6:32
+  |
+6 | struct BitField(#[field(1, 7)] Field); // Needs a size of 8 instead of 7 to store negative values.
+  |                                ^^^^^ expected `Infallible`, found `u8`
+
+error[E0277]: the trait bound `Field: From<u8>` is not satisfied
+ --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:6:28
+  |
+6 | struct BitField(#[field(1, 7)] Field); // Needs a size of 8 instead of 7 to store negative values.
+  |                            ^^^^-----
+  |                            |   |
+  |                            |   required by a bound introduced by this call
+  |                            the trait `From<u8>` is not implemented for `Field`
+  |
+  = help: the trait `TryFrom<i8>` is implemented for `Field`
+  = help: for that trait implementation, expected `i8`, found `u8`
+  = note: required for `u8` to implement `Into<Field>`
+  = note: required for `Field` to implement `TryFrom<u8>`
+
+error[E0277]: the trait bound `Field: From<u8>` is not satisfied
+ --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:6:32
+  |
+6 | struct BitField(#[field(1, 7)] Field); // Needs a size of 8 instead of 7 to store negative values.
+  |                                ^^^^^ the trait `From<u8>` is not implemented for `Field`
+  |
+  = help: the trait `TryFrom<i8>` is implemented for `Field`
+  = help: for that trait implementation, expected `i8`, found `u8`
+  = note: required for `u8` to implement `Into<Field>`
+  = note: required for `Field` to implement `TryFrom<u8>`

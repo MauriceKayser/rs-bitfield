@@ -1,7 +1,9 @@
 error[E0080]: evaluation of constant value failed
- --> tests/ui/bitfield/flags_overlap_field.rs:5:1
+ --> tests/ui/bitfield/flags_overlap_field.rs:8:12
   |
-5 | #[bitfield::bitfield(8)]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^ the evaluated program panicked at 'Flags in field 1 overlap with field 0', $DIR/tests/ui/bitfield/flags_overlap_field.rs:5:1
+8 |       field: Field,
+  |  ____________^
+9 | |     flags: Flags
+  | |________________^ the evaluated program panicked at 'Flags overlap with field', $DIR/tests/ui/bitfield/flags_overlap_field.rs:8:12
   |
   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)

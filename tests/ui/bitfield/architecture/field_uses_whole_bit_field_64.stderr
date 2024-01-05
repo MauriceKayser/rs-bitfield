@@ -1,7 +1,7 @@
 error[E0080]: evaluation of constant value failed
- --> tests/ui/bitfield/architecture/field_uses_whole_bit_field_64.rs:5:1
+ --> tests/ui/bitfield/architecture/field_uses_whole_bit_field_64.rs:6:25
   |
-5 | #[bitfield::bitfield(size)]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^ the evaluated program panicked at 'Field 0 has the size of the whole bitfield', $DIR/tests/ui/bitfield/architecture/field_uses_whole_bit_field_64.rs:5:1
+6 | struct BitField(#[field(0, 64)] Field); // Uses the whole bit field, a use a plain `Field` instead.
+  |                         ^^^^^ the evaluated program panicked at 'Field has the size of the whole bitfield', $DIR/tests/ui/bitfield/architecture/field_uses_whole_bit_field_64.rs:6:25
   |
   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
