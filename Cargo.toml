@@ -5,13 +5,13 @@ keywords = ["bit", "bitfield", "bitfields", "bitflag", "bitflags", "bitmask", "f
 license = "MIT/Apache-2.0"
 name = "bitfield"
 readme = "README.md"
-version = "1.7.6"
+version = "1.7.7"
 
 [lib]
 proc-macro = true
 
 [dependencies]
-bitfield-impl = { git = "https://github.com/MauriceKayser/rs-bitfield-impl", rev = "11f6f36ba538289e8826dbe9d97c81977d4e76d1" }
+bitfield-impl = { git = "https://github.com/MauriceKayser/rs-bitfield-impl", rev = "45d4e61a052dc4e3374653961c38542d25d28b3c" }
 proc-macro2 = "1.0.75"
 quote = "1.0.35"
 syn = "1.0.109"
