@@ -83,7 +83,11 @@ enum Severity {
 /// `Option<NtStatus>`, where `None` is mapped to `0` because of the `NonZero32` bitfield type.
 #[allow(non_snake_case)]
 fn NtTestFunction(return_something: bool) -> Option<NtStatus> {
-    return_something.then(|| NtStatus::new().set_code(5) + Severity::Error)
+    return_something.then(||
+        NtStatus(unsafe { *(&0u32 as *const u32 as *const _) })
+        .set_code(5).unwrap()
+        .set_severity(Severity::Error).unwrap()
+    )
 }
 
 fn main() {

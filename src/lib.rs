@@ -538,13 +538,15 @@
 /// The following type definition is generated for a bit field:
 ///
 /// ```ignore
-/// #[repr(C)]
+/// #[repr(transparent)]
 /// struct #NAME(#PRIMITIVE_TYPE);
 /// ```
 ///
 /// ## 2.1. Initialization
 ///
 /// For initialization purposes the following method is generated:
+///
+/// ### 2.1.1 Primitive type based bit field
 ///
 /// ```ignore
 /// /// Creates a new instance with all flags and fields cleared.
@@ -560,12 +562,25 @@
 /// let field = BitField::new();
 /// ```
 ///
+/// ### 2.1.2 `NonZero` type based bit field
+///
+/// `NonZero` type based bit fields can not safely be initialized from `0`, so no `new` method is generated.
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(NonZero8)]
+/// struct BitField(bool);
+/// ```
+///
 /// ## 2.2. Accessors
 ///
 /// All methods that change the state of a bit field do not actually change the bit field, but
 /// return a changed copy of it, in a way that it can be constructed with the
 /// [builder pattern](https://doc.rust-lang.org/1.0.0/style/ownership/builders.html). To access
-/// fields and flags the following methods are generated:
+/// fields and flags the following methods are generated, with the exception that for `NonZero`
+/// type based bit fields, the methods that return `Self` in the examples below return `Option<Self>`
+/// instead, when the internal value becomes `0`:
 ///
 /// ### 2.2.1 Flags
 ///
@@ -662,6 +677,8 @@
 /// assert!(!field.has_all());
 /// assert!(!field.has_any());
 /// ```
+///
+/// The `#SETTER_none` method is not generated at all, if a `NonZero` type based bit field has only one entry, as this would guarantee to return `None`.
 ///
 /// ### 2.2.2 Fields
 ///
@@ -915,8 +932,23 @@
 ///     #    Flag00000001
 ///     # }
 ///     ```
+/// - The primitive type is a `NonZero` variant. The explicit setter accessors return `Option<Self>`,
+/// which is not possible for the trait implementations.
 ///
-/// If the condition is not met, the following `core::ops::*` implementations are generated:
+///     Negative example:
+///
+///     ```rust
+///     #[bitfield::bitfield(NonZero8)]
+///     struct BitField(Flag);
+///     #
+///     # #[derive(Copy, Clone, Debug, bitfield::Flags)]
+///     # #[repr(u8)]
+///     # enum Flag {
+///     #    Flag00000001
+///     # }
+///     ```
+///
+/// If the right conditions are met, the following `core::ops::*` implementations are generated:
 ///
 /// ```rust,ignore
 /// core::ops::Add<#FLAG_TYPE>;
@@ -995,6 +1027,21 @@
 ///     #    Zero
 ///     # }
 ///     ```
+/// - The primitive type is a `NonZero` variant. The explicit setter accessors return `Option<Self>`,
+/// which is not possible for the trait implementations.
+///
+///     Negative example:
+///
+///     ```rust
+///     #[bitfield::bitfield(NonZero8)]
+///     struct BitField(#[field(size = 3)] Field);
+///     #
+///     # #[derive(Copy, Clone, bitfield::Field)]
+///     # #[repr(u8)]
+///     # enum Field {
+///     #    Zero
+///     # }
+///     ```
 /// - The type of the field is used more than once in the bit field. The implementation can not know
 /// which field to access.
 ///
@@ -1014,7 +1061,7 @@
 ///     # }
 ///     ```
 ///
-/// If none of these conditions are met, the following `core::ops::*` implementations are generated:
+/// If the right conditions are met, the following `core::ops::*` implementations are generated:
 ///
 /// ```rust,ignore
 /// core::ops::Add<#FIELD_TYPE>;

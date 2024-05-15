@@ -1217,12 +1217,13 @@ mod tests {
         #[bitfield::bitfield(NonZero8)]
         struct BitField(#[field(size = 2)] Field2);
 
-        let mut field = BitField::new();
+        impl BitField { const unsafe fn new() -> Self { Self(*(&0u8 as *const u8 as *const _)) } }
+
+        let mut field = unsafe { BitField::new() };
         assert_eq!(field.get(), Ok(Field2::F0));
-        field = field.set(Field2::F1);
+        field = field.set(Field2::F1).unwrap();
         assert_eq!(field.get(), Ok(Field2::F1));
-        field = field.set(Field2::F0);
-        assert_eq!(field.get(), Ok(Field2::F0));
+        assert!(field.set(Field2::F0).is_none());
     }
 
     #[test]
@@ -1240,40 +1241,47 @@ mod tests {
         #[bitfield::bitfield(NonZeroSize)]
         struct BitFieldSize(Flags);
 
-        assert_eq!(core::mem::size_of_val(&BitField8::new()), 1);
-        assert_eq!(core::mem::size_of_val(&Some(BitField8::new())), 1);
-        assert_eq!(core::mem::size_of_val(&BitField16::new()), 2);
-        assert_eq!(core::mem::size_of_val(&Some(BitField16::new())), 2);
-        assert_eq!(core::mem::size_of_val(&BitField32::new()), 4);
-        assert_eq!(core::mem::size_of_val(&Some(BitField32::new())), 4);
-        assert_eq!(core::mem::size_of_val(&BitField64::new()), 8);
-        assert_eq!(core::mem::size_of_val(&Some(BitField64::new())), 8);
-        assert_eq!(core::mem::size_of_val(&BitField128::new()), 16);
-        assert_eq!(core::mem::size_of_val(&Some(BitField128::new())), 16);
+        impl BitField8 { const unsafe fn new() -> Self { Self(*(&0u8 as *const u8 as *const _)) } }
+        impl BitField16 { const unsafe fn new() -> Self { Self(*(&0u16 as *const u16 as *const _)) } }
+        impl BitField32 { const unsafe fn new() -> Self { Self(*(&0u32 as *const u32 as *const _)) } }
+        impl BitField64 { const unsafe fn new() -> Self { Self(*(&0u64 as *const u64 as *const _)) } }
+        impl BitField128 { const unsafe fn new() -> Self { Self(*(&0u128 as *const u128 as *const _)) } }
+        impl BitFieldSize { const unsafe fn new() -> Self { Self(*(&0usize as *const usize as *const _)) } }
+
+        assert_eq!(core::mem::size_of_val(&unsafe { BitField8::new() }), 1);
+        assert_eq!(core::mem::size_of_val(&Some(unsafe { BitField8::new() })), 1);
+        assert_eq!(core::mem::size_of_val(&unsafe { BitField16::new() }), 2);
+        assert_eq!(core::mem::size_of_val(&Some(unsafe { BitField16::new() })), 2);
+        assert_eq!(core::mem::size_of_val(&unsafe { BitField32::new() }), 4);
+        assert_eq!(core::mem::size_of_val(&Some(unsafe { BitField32::new() })), 4);
+        assert_eq!(core::mem::size_of_val(&unsafe { BitField64::new() }), 8);
+        assert_eq!(core::mem::size_of_val(&Some(unsafe { BitField64::new() })), 8);
+        assert_eq!(core::mem::size_of_val(&unsafe { BitField128::new() }), 16);
+        assert_eq!(core::mem::size_of_val(&Some(unsafe { BitField128::new() })), 16);
         #[cfg(target_pointer_width = "8")]
         {
-            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 1);
-            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 1);
+            assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 1);
+            assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 1);
         }
         #[cfg(target_pointer_width = "16")]
         {
-            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 2);
-            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 2);
+            assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 2);
+            assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 2);
         }
         #[cfg(target_pointer_width = "32")]
         {
-            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 4);
-            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 4);
+            assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 4);
+            assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 4);
         }
         #[cfg(target_pointer_width = "64")]
         {
-            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 8);
-            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 8);
+            assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 8);
+            assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 8);
         }
         #[cfg(target_pointer_width = "128")]
         {
-            assert_eq!(core::mem::size_of_val(&BitFieldSize::new()), 16);
-            assert_eq!(core::mem::size_of_val(&Some(BitFieldSize::new())), 16);
+            assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 16);
+            assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 16);
         }
     }
 
