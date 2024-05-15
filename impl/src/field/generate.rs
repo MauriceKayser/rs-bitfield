@@ -104,21 +104,21 @@ mod tests {
                     }
                 }
 
-                impl core::convert::TryFrom<u8> for C {
+                impl ::core::convert::TryFrom<u8> for C {
                     type Error = u8;
 
                     #[allow(non_upper_case_globals)]
                     #[inline(always)]
-                    fn try_from(value: u8) -> core::result::Result<
-                        Self, <Self as core::convert::TryFrom<u8>>::Error
+                    fn try_from(value: u8) -> ::core::result::Result<
+                        Self, <Self as ::core::convert::TryFrom<u8>>::Error
                     > {
                         const D: u8 = C::D as u8;
 
                         match value {
-                            D => core::result::Result::Ok(unsafe {
+                            D => ::core::result::Result::Ok(unsafe {
                                 *(&value as *const u8 as *const Self)
                             }),
-                            _ => core::result::Result::Err(value)
+                            _ => ::core::result::Result::Err(value)
                         }
                     }
                 }

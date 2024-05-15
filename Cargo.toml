@@ -5,7 +5,7 @@ keywords = ["bit", "bitfield", "bitfields", "bitflag", "bitflags", "bitmask", "f
 license = "MIT/Apache-2.0"
 name = "bitfield"
 readme = "README.md"
-version = "1.8.0"
+version = "1.8.1"
 
 [lib]
 proc-macro = true

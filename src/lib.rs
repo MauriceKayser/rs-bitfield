@@ -768,7 +768,7 @@
 /// ///
 /// /// Returns `None` if `value` is bigger than the specified amount of
 /// /// bits for the field can store.
-/// const fn #SETTER(&self, value: #PRIMITIVE_TYPE) -> Option<Self>;
+/// const fn #SETTER(&self, value: #PRIMITIVE_TYPE) -> core::option::Option<Self>;
 /// ```
 ///
 /// Example:
@@ -1163,23 +1163,23 @@ pub fn bitfield(
 ///     }
 /// }
 ///
-/// impl core::convert::TryFrom<u8> for UnsignedField {
+/// impl ::core::convert::TryFrom<u8> for UnsignedField {
 ///     type Error = u8;
 ///
 ///     #[allow(non_upper_case_globals)]
 ///     #[inline(always)]
-///     fn try_from(value: u8) -> core::result::Result<
-///         Self, <Self as core::convert::TryFrom<u8>>::Error
+///     fn try_from(value: u8) -> ::core::result::Result<
+///         Self, <Self as ::core::convert::TryFrom<u8>>::Error
 ///     > {
 ///         const Variant1: u8 = UnsignedField::Variant1 as u8;
 ///         const Variant2: u8 = UnsignedField::Variant2 as u8;
 ///         const Variant5: u8 = UnsignedField::Variant5 as u8;
 ///
 ///         match value {
-///             Variant1 | Variant2 | Variant5 => core::result::Result::Ok(unsafe {
+///             Variant1 | Variant2 | Variant5 => ::core::result::Result::Ok(unsafe {
 ///                 *(&value as *const u8 as *const Self)
 ///             }),
-///             _ => core::result::Result::Err(value)
+///             _ => ::core::result::Result::Err(value)
 ///         }
 ///     }
 /// }
@@ -1192,22 +1192,22 @@ pub fn bitfield(
 ///     }
 /// }
 ///
-/// impl core::convert::TryFrom<i8> for SignedField {
+/// impl ::core::convert::TryFrom<i8> for SignedField {
 ///     type Error = i8;
 ///
 ///     #[allow(non_upper_case_globals)]
 ///     #[inline(always)]
-///     fn try_from(value: i8) -> core::result::Result<
-///         Self, <Self as core::convert::TryFrom<i8>>::Error
+///     fn try_from(value: i8) -> ::core::result::Result<
+///         Self, <Self as ::core::convert::TryFrom<i8>>::Error
 ///     > {
 ///         const VariantMinus1: i8 = SignedField::VariantMinus1 as i8;
 ///         const Variant1: i8 = SignedField::Variant1 as i8;
 ///
 ///         match value {
-///             VariantMinus1 | Variant1 => core::result::Result::Ok(unsafe {
+///             VariantMinus1 | Variant1 => ::core::result::Result::Ok(unsafe {
 ///                 *(&value as *const i8 as *const Self)
 ///             }),
-///             _ => core::result::Result::Err(value)
+///             _ => ::core::result::Result::Err(value)
 ///         }
 ///     }
 /// }
@@ -1393,23 +1393,23 @@ pub fn flags(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 /// #     Variant2,
 /// #     Variant5 = 5
 /// # }
-/// impl core::convert::TryFrom<u8> for Field {
+/// impl ::core::convert::TryFrom<u8> for Field {
 ///     type Error = u8;
 ///
 ///     #[allow(non_upper_case_globals)]
 ///     #[inline(always)]
-///     fn try_from(value: u8) -> core::result::Result<
-///         Self, <Self as core::convert::TryFrom<u8>>::Error
+///     fn try_from(value: u8) -> ::core::result::Result<
+///         Self, <Self as ::core::convert::TryFrom<u8>>::Error
 ///     > {
 ///         const Variant1: u8 = Field::Variant1 as u8;
 ///         const Variant2: u8 = Field::Variant2 as u8;
 ///         const Variant5: u8 = Field::Variant5 as u8;
 ///
 ///         match value {
-///             Variant1 | Variant2 | Variant5 => core::result::Result::Ok(unsafe {
+///             Variant1 | Variant2 | Variant5 => ::core::result::Result::Ok(unsafe {
 ///                 *(&value as *const u8 as *const Self)
 ///             }),
-///             _ => core::result::Result::Err(value)
+///             _ => ::core::result::Result::Err(value)
 ///         }
 ///     }
 /// }

@@ -23,12 +23,12 @@ impl syn::parse::Parse for super::Attribute {
                 .map_err(|e| e.span())
                 .and_then(|type_identifier| match type_identifier.to_string().as_ref() {
                     "size" => Ok(("usize", "usize", None, false)),
-                    "NonZero8" => Ok(("core::num::NonZeroU8", "u8", Some(8), true)),
-                    "NonZero16" => Ok(("core::num::NonZeroU16", "u16", Some(16), true)),
-                    "NonZero32" => Ok(("core::num::NonZeroU32", "u32", Some(32), true)),
-                    "NonZero64" => Ok(("core::num::NonZeroU64", "u64", Some(64), true)),
-                    "NonZero128" => Ok(("core::num::NonZeroU128", "u128", Some(128), true)),
-                    "NonZeroSize" => Ok(("core::num::NonZeroUsize", "usize", None, true)),
+                    "NonZero8" => Ok(("::core::num::NonZeroU8", "u8", Some(8), true)),
+                    "NonZero16" => Ok(("::core::num::NonZeroU16", "u16", Some(16), true)),
+                    "NonZero32" => Ok(("::core::num::NonZeroU32", "u32", Some(32), true)),
+                    "NonZero64" => Ok(("::core::num::NonZeroU64", "u64", Some(64), true)),
+                    "NonZero128" => Ok(("::core::num::NonZeroU128", "u128", Some(128), true)),
+                    "NonZeroSize" => Ok(("::core::num::NonZeroUsize", "usize", None, true)),
                     _ => Err(type_identifier.span())
                 }.map(|d| (
                     std::borrow::Cow::Borrowed(d.0),
@@ -713,7 +713,7 @@ pub(super) mod tests {
         assert_eq!(attr.bits, Some(8));
         assert_eq!(
             attr.base_type.to_token_stream().to_string(),
-            quote::quote!(core::num::NonZeroU8).to_string()
+            quote::quote!(::core::num::NonZeroU8).to_string()
         );
         assert_eq!(attr.primitive_type, "u8");
 
@@ -726,7 +726,7 @@ pub(super) mod tests {
         assert_eq!(attr.bits, Some(16));
         assert_eq!(
             attr.base_type.to_token_stream().to_string(),
-            quote::quote!(core::num::NonZeroU16).to_string()
+            quote::quote!(::core::num::NonZeroU16).to_string()
         );
         assert_eq!(attr.primitive_type, "u16");
 
@@ -739,7 +739,7 @@ pub(super) mod tests {
         assert_eq!(attr.bits, Some(32));
         assert_eq!(
             attr.base_type.to_token_stream().to_string(),
-            quote::quote!(core::num::NonZeroU32).to_string()
+            quote::quote!(::core::num::NonZeroU32).to_string()
         );
         assert_eq!(attr.primitive_type, "u32");
 
@@ -752,7 +752,7 @@ pub(super) mod tests {
         assert_eq!(attr.bits, Some(64));
         assert_eq!(
             attr.base_type.to_token_stream().to_string(),
-            quote::quote!(core::num::NonZeroU64).to_string()
+            quote::quote!(::core::num::NonZeroU64).to_string()
         );
         assert_eq!(attr.primitive_type, "u64");
 
@@ -765,7 +765,7 @@ pub(super) mod tests {
         assert_eq!(attr.bits, Some(128));
         assert_eq!(
             attr.base_type.to_token_stream().to_string(),
-            quote::quote!(core::num::NonZeroU128).to_string()
+            quote::quote!(::core::num::NonZeroU128).to_string()
         );
         assert_eq!(attr.primitive_type, "u128");
 
@@ -778,7 +778,7 @@ pub(super) mod tests {
         assert_eq!(attr.bits, None);
         assert_eq!(
             attr.base_type.to_token_stream().to_string(),
-            quote::quote!(core::num::NonZeroUsize).to_string()
+            quote::quote!(::core::num::NonZeroUsize).to_string()
         );
         assert_eq!(attr.primitive_type, "usize");
     }
