@@ -5,7 +5,7 @@ extern crate alloc;
 #[bitfield::bitfield(size)]
 struct BitField(#[field(250, 2)] Field); // Can only store bits between 0 - (sizeof(usize) * 8).
 
-#[derive(Debug, bitfield::Field)]
+#[derive(Clone, Copy, Debug, bitfield::Field)]
 #[repr(u8)]
 enum Field {
     F1 = 1,

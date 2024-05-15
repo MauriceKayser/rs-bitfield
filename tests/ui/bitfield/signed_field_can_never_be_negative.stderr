@@ -12,14 +12,14 @@ error[E0271]: type mismatch resolving `<Field as TryFrom<u8>>::Error == u8`
 6 | struct BitField(#[field(1, 7)] Field); // Needs a size of 8 instead of 7 to store negative values.
   |                                ^^^^^ expected `Infallible`, found `u8`
 
-error[E0277]: the trait bound `Field: From<u8>` is not satisfied
+error[E0277]: the trait bound `Field: TryFrom<u8>` is not satisfied
  --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:6:28
   |
 6 | struct BitField(#[field(1, 7)] Field); // Needs a size of 8 instead of 7 to store negative values.
   |                            ^^^^-----
   |                            |   |
   |                            |   required by a bound introduced by this call
-  |                            the trait `From<u8>` is not implemented for `Field`
+  |                            the trait `From<u8>` is not implemented for `Field`, which is required by `Field: TryFrom<u8>`
   |
   = help: the trait `TryFrom<i8>` is implemented for `Field`
   = help: for that trait implementation, expected `i8`, found `u8`
@@ -30,7 +30,7 @@ error[E0277]: the trait bound `Field: From<u8>` is not satisfied
  --> tests/ui/bitfield/signed_field_can_never_be_negative.rs:6:32
   |
 6 | struct BitField(#[field(1, 7)] Field); // Needs a size of 8 instead of 7 to store negative values.
-  |                                ^^^^^ the trait `From<u8>` is not implemented for `Field`
+  |                                ^^^^^ the trait `From<u8>` is not implemented for `Field`, which is required by `Field: TryFrom<u8>`
   |
   = help: the trait `TryFrom<i8>` is implemented for `Field`
   = help: for that trait implementation, expected `i8`, found `u8`

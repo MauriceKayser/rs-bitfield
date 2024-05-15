@@ -5,7 +5,7 @@ extern crate alloc;
 #[bitfield::bitfield(16)]
 struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
 
-#[derive(Debug, bitfield::Field)]
+#[derive(Clone, Copy, Debug, bitfield::Field)]
 #[repr(u8)]
 enum Field {
     F1 = 1,

@@ -9,7 +9,7 @@ struct BitField {
     flags: Flags
 }
 
-#[derive(Debug, bitfield::Field)]
+#[derive(Clone, Copy, Debug, bitfield::Field)]
 #[repr(u8)]
 enum Field {
     F1 = 1,

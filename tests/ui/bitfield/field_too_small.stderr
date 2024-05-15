@@ -12,14 +12,14 @@ error[E0271]: type mismatch resolving `<Field as TryFrom<u16>>::Error == u16`
 6 | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
   |                                ^^^^^ expected `Infallible`, found `u16`
 
-error[E0277]: the trait bound `Field: From<u16>` is not satisfied
+error[E0277]: the trait bound `Field: TryFrom<u16>` is not satisfied
  --> tests/ui/bitfield/field_too_small.rs:6:28
   |
 6 | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
   |                            ^^^^-----
   |                            |   |
   |                            |   required by a bound introduced by this call
-  |                            the trait `From<u16>` is not implemented for `Field`
+  |                            the trait `From<u16>` is not implemented for `Field`, which is required by `Field: TryFrom<u16>`
   |
   = help: the trait `TryFrom<u8>` is implemented for `Field`
   = help: for that trait implementation, expected `u8`, found `u16`
@@ -30,7 +30,7 @@ error[E0277]: the trait bound `Field: From<u16>` is not satisfied
  --> tests/ui/bitfield/field_too_small.rs:6:32
   |
 6 | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
-  |                                ^^^^^ the trait `From<u16>` is not implemented for `Field`
+  |                                ^^^^^ the trait `From<u16>` is not implemented for `Field`, which is required by `Field: TryFrom<u16>`
   |
   = help: the trait `TryFrom<u8>` is implemented for `Field`
   = help: for that trait implementation, expected `u8`, found `u16`

@@ -5,7 +5,7 @@ extern crate alloc;
 #[bitfield::bitfield(size)]
 struct BitField(#[field(0, 64)] Field); // Uses the whole bit field, a use a plain `Field` instead.
 
-#[derive(Debug, bitfield::Field)]
+#[derive(Clone, Copy, Debug, bitfield::Field)]
 #[repr(u64)]
 enum Field {
     F1 = 1,
