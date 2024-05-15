@@ -124,7 +124,8 @@ impl super::BitField {
         entry: &super::Entry,
         getter: &syn::Ident,
         setter: &syn::Ident,
-        inverter: &syn::Ident
+        inverter: &syn::Ident,
+        span: proc_macro2::Span
     ) -> proc_macro2::TokenStream {
         let attrs = &entry.attrs;
         let vis = &entry.vis;
@@ -150,7 +151,7 @@ impl super::BitField {
             // Special handling for primitive types.
             if let Some(ty) = ty.get_ident() {
                 if crate::primitive::is_bool(ty) {
-                    return quote::quote! {
+                    return quote::quote_spanned! { span =>
                         #(#attrs)*
                         /// Gets the value of the field.
                         #[allow(unused)]
@@ -178,7 +179,7 @@ impl super::BitField {
                         }
                     };
                 } else if crate::primitive::is_signed_primitive(ty) {
-                    return quote::quote! {
+                    return quote::quote_spanned! { span =>
                         #(#attrs)*
                         /// Gets the value of the field.
                         #[allow(unused)]
@@ -199,7 +200,7 @@ impl super::BitField {
                 } else if crate::primitive::is_unsigned_primitive(ty) {
                     return if crate::primitive::primitive_bits(ty).unwrap() != size {
                         // Fields with a size < bits_of(FieldPrimitive).
-                        quote::quote! {
+                        quote::quote_spanned! { span =>
                             #(#attrs)*
                             /// Gets the value of the field.
                             #[allow(unused)]
@@ -227,7 +228,7 @@ impl super::BitField {
                         }
                     } else {
                         // Fields with a size == bits_of(FieldPrimitive).
-                        quote::quote! {
+                        quote::quote_spanned! { span =>
                             #(#attrs)*
                             /// Gets the value of the field.
                             #[allow(unused)]
@@ -262,7 +263,7 @@ impl super::BitField {
             let body_span = ty.span();
             let body = quote::quote_spanned!(body_span => core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive));
 
-            quote::quote! {
+            quote::quote_spanned! { span =>
                 #(#attrs)*
                 /// Returns the primitive value encapsulated in the `Err` variant, if the value can
                 /// not be converted to the expected type.
@@ -319,7 +320,7 @@ impl super::BitField {
                 quote::quote!(self.0.get())
             )};
 
-            quote::quote! {
+            quote::quote_spanned! { span =>
                 #(#attrs)*
                 /// Returns `true` if the specified `flag` is set.
                 #[allow(unused)]
@@ -416,7 +417,7 @@ impl super::BitField {
                             &format!("set_{}", &unraw), entry.ident.span()
                         ), &syn::Ident::new(
                             &format!("invert_{}", &unraw), entry.ident.span()
-                        )
+                        ), entry.ident.span()
                     ));
                 }
 
@@ -431,7 +432,8 @@ impl super::BitField {
                         entry.ty.span()
                     ),
                     &syn::Ident::new("set", entry.ty.span()),
-                    &syn::Ident::new("invert", entry.ty.span())
+                    &syn::Ident::new("invert", entry.ty.span()),
+                    entry.ty.span()
                 ))
             }
         };
@@ -493,7 +495,7 @@ impl super::BitField {
                                 implementations.push(Self::generate_accessor_ops_field(
                                     &self, &entry.entry.ty, &syn::Ident::new(
                                         &format!("set_{}", &unraw), entry.ident.span()
-                                    )
+                                    ), entry.ident.span()
                                 ));
                             }
                         }
@@ -504,7 +506,7 @@ impl super::BitField {
                                     &format!("set_{}", &unraw), entry.ident.span()
                                 ),&syn::Ident::new(
                                     &format!("invert_{}", &unraw), entry.ident.span()
-                                )
+                                ), entry.ident.span()
                             ));
                         }
                     }
@@ -524,7 +526,8 @@ impl super::BitField {
                             if *occurrences == 1 {
                                 implementations.push(Self::generate_accessor_ops_field(
                                     &self, &entry.ty,
-                                    &syn::Ident::new("set", entry.ty.span())
+                                    &syn::Ident::new("set", entry.ty.span()),
+                                    entry.ty.span()
                                 ));
                             }
                         }
@@ -534,7 +537,8 @@ impl super::BitField {
                         implementations.push(Self::generate_accessor_ops_flags(
                             &self, &entry.ty,
                             &syn::Ident::new("set", entry.ty.span()),
-                            &syn::Ident::new("invert", entry.ty.span())
+                            &syn::Ident::new("invert", entry.ty.span()),
+                            entry.ty.span()
                         ));
                     }
                 }
@@ -554,11 +558,12 @@ impl super::BitField {
     fn generate_accessor_ops_field(
         &self,
         field: &syn::Path,
-        setter: &syn::Ident
+        setter: &syn::Ident,
+        span: proc_macro2::Span
     ) -> proc_macro2::TokenStream {
         let ty = &self.ident;
 
-        quote::quote! {
+        quote::quote_spanned! { span =>
             impl core::ops::Add<#field> for #ty {
                 type Output = Self;
 
@@ -582,11 +587,12 @@ impl super::BitField {
         &self,
         flags: &syn::Path,
         setter: &syn::Ident,
-        inverter: &syn::Ident
+        inverter: &syn::Ident,
+        span: proc_macro2::Span
     ) -> proc_macro2::TokenStream {
         let ty = &self.ident;
 
-        quote::quote! {
+        quote::quote_spanned! { span =>
             impl core::ops::Add<#flags> for #ty {
                 type Output = Self;
 
@@ -824,6 +830,7 @@ impl super::BitField {
                         return proc_macro2::TokenStream::new();
                     }
     
+                    let span = entry.ident.span();
                     let entry_ty = &entry.entry.ty;
                     let inner_ty = &inner.entry.ty;
     
@@ -846,7 +853,7 @@ impl super::BitField {
                         let bit = field.bit.as_ref().unwrap().base10_parse::<u8>().unwrap();
                         let size = field.size.as_ref().unwrap().base10_parse::<u8>().unwrap();
     
-                        quote::quote! {
+                        quote::quote_spanned! { span =>
                             const fn #fn_name() -> bool {
                                 let flags = #entry_ty::iter();
     
@@ -883,7 +890,7 @@ impl super::BitField {
                             name.span()
                         );
     
-                        quote::quote! {
+                        quote::quote_spanned! { span =>
                             const fn #fn_name() -> bool {
                                 let f1 = #entry_ty::iter();
                                 let f2 = #inner_ty::iter();
@@ -935,14 +942,14 @@ impl super::BitField {
 
     /// Generates a debug/display sequence for fields.
     fn generate_print_field(
-        entry: &super::Entry, getter: &syn::Ident, print: proc_macro2::TokenStream
+        entry: &super::Entry, getter: &syn::Ident, print: proc_macro2::TokenStream, span: proc_macro2::Span
     ) -> proc_macro2::TokenStream {
         entry.ty.get_ident().and_then(|ty| crate::primitive::is_primitive(ty).then(
-            || quote::quote! {
+            || quote::quote_spanned! { span =>
                 let value = self.#getter();
                 #print
             }
-        )).unwrap_or_else(|| quote::quote! {
+        )).unwrap_or_else(|| quote::quote_spanned! { span =>
             let value = self.#getter();
             if let core::result::Result::Ok(value) = value {
                 #print
@@ -971,19 +978,20 @@ impl super::BitField {
                 for entry in entries {
                     let ident = &entry.ident;
                     let unraw = ident.unraw();
+                    let span = entry.ident.span();
 
                     fields.push(if entry.entry.field.is_some() {
                         // Display fields as a normal struct field.
-                        super::BitField::generate_print_field(&entry.entry, ident, quote::quote! {
+                        super::BitField::generate_print_field(&entry.entry, ident, quote::quote_spanned! { span =>
                             s.field(core::stringify!(#unraw), &value);
-                        })
+                        }, span)
                     } else {
                         // Display flags as sub structure with a `bool` field for each flag.
                         let self_ident = &self.ident;
                         let ty = &entry.entry.ty;
                         let ty_name = &entry.entry.ty.segments.last().unwrap().ident;
 
-                        quote::quote! {{
+                        quote::quote_spanned! { span => {
                             struct BitFieldDebugImplementor<'a>(&'a #self_ident);
 
                             impl<'a> core::fmt::Debug for BitFieldDebugImplementor<'a> {
@@ -1008,6 +1016,7 @@ impl super::BitField {
 
             super::Data::Tuple(entry) => {
                 let ty = &entry.ty;
+                let span = entry.ty.span();
 
                 vec!(if entry.field.is_some()
                 {
@@ -1015,12 +1024,12 @@ impl super::BitField {
                     let ident = &ty.segments.last().unwrap().ident;
                     let getter = syn::Ident::new("get", ty.span());
 
-                    super::BitField::generate_print_field(entry, &getter, quote::quote! {
+                    super::BitField::generate_print_field(entry, &getter, quote::quote_spanned! { span =>
                         s.field(core::stringify!(#ident), &value);
-                    })
+                    }, entry.ty.span())
                 } else {
                     // Display each flag as a `bool` field.
-                    quote::quote! {
+                    quote::quote_spanned! { span =>
                         for flag in <#ty>::iter() {
                             s.field(&alloc::format!("{:?}", flag), &self.has(*flag));
                         }
@@ -1050,7 +1059,7 @@ impl super::BitField {
     fn generate_display(&self) -> proc_macro2::TokenStream {
         /// Generates the implementation for a single entry (named or tuple struct).
         fn generate_display_for_entry(
-            ident: &syn::Ident, getter: &syn::Ident, entry: &super::Entry
+            ident: &syn::Ident, getter: &syn::Ident, entry: &super::Entry, span: proc_macro2::Span
         ) -> proc_macro2::TokenStream {
             let ty = &entry.ty;
 
@@ -1059,10 +1068,10 @@ impl super::BitField {
                 // Display the field value.
                 super::BitField::generate_print_field(entry, getter, quote::quote! {
                     f.write_str(&alloc::format!("{:?}", value))
-                })
+                }, span)
             } else {
                 // Display all set flags joined with `" | "`, or "-" if no flag is set at all.
-                quote::quote! {
+                quote::quote_spanned! { span =>
                     let mut flags = alloc::vec::Vec::new();
 
                     for flag in <#ty>::iter() {
@@ -1077,7 +1086,7 @@ impl super::BitField {
                 }
             };
 
-            quote::quote! {
+            quote::quote_spanned! { span =>
                 impl core::fmt::Display for #ident {
                     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
                         #implementation
@@ -1098,7 +1107,7 @@ impl super::BitField {
                     panic!("can not generate `Display` for empty bit fields");
                 } else if entries.len() == 1 {
                     let first = entries.first().unwrap();
-                    generate_display_for_entry(ident, &first.ident, &first.entry)
+                    generate_display_for_entry(ident, &first.ident, &first.entry, first.ident.span())
                 } else {
                     // Do not generate `Display` for bit fields with non-flags.
                     // Should have been checked in `parse::validate_display`.
@@ -1111,6 +1120,7 @@ impl super::BitField {
                     let iterators = entries.iter().map(|c| {
                         let ty = &c.entry.ty;
                         let ident = &c.ident;
+                        let span = c.ident.span();
 
                         let format_data = if entries.len() > 1 {
                             quote::quote! { "{}::{:?}", core::any::type_name::<#ty>(), flag }
@@ -1118,7 +1128,7 @@ impl super::BitField {
                             quote::quote! { "{:?}", flag }
                         };
 
-                        quote::quote! {
+                        quote::quote_spanned! { span =>
                             for flag in <#ty>::iter() {
                                 if self.#ident(*flag) {
                                     flags.push(alloc::format!(#format_data));
@@ -1150,7 +1160,7 @@ impl super::BitField {
                     if entry.field.is_some() { "get" } else { "has" },
                     entry.ty.span()
                 );
-                generate_display_for_entry(ident, &getter, entry)
+                generate_display_for_entry(ident, &getter, entry, entry.ty.span())
             }
         }
     }
@@ -1234,7 +1244,7 @@ mod tests {
                 let inverter = syn::Ident::new("test_invert", entry.ty.span());
 
                 assert_eq!(
-                    bitfield.generate_accessor(&entry, &getter, &setter, &inverter).to_string(),
+                    bitfield.generate_accessor(&entry, &getter, &setter, &inverter, entry.ty.span()).to_string(),
                     $result.to_string()
                 );
             } else { panic!("expected tuple struct") }
