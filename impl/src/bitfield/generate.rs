@@ -295,22 +295,12 @@ impl super::BitField {
             };
 
             quote::quote_spanned! { span =>
+                // TODO: Add `const` when https://github.com/rust-lang/rust-project-goals/issues/106 is merged.
                 #(#attrs)*
                 /// Gets the value of the field.
                 #doc
                 #[allow(unused)]
                 #[inline(always)]
-                // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
-                #[cfg(const_trait_impl)]
-                #vis const fn #getter(&self) -> #getter_type { #body }
-
-                // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
-                #(#attrs)*
-                /// Gets the value of the field.
-                #doc
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 #vis fn #getter(&self) -> #getter_type { #body }
 
                 #(#attrs)*
@@ -1589,18 +1579,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                #[some_attribute1]
-                #[some_attribute2]
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -1624,18 +1602,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                #[some_attribute1]
-                #[some_attribute2]
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -1734,16 +1700,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                pub const fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 pub fn test_get(&self) -> ::core::result::Result<A, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -1903,16 +1859,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<B, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -1932,16 +1878,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<B, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -2101,16 +2037,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -2130,16 +2056,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -2160,16 +2076,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u16> {
-                    ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u16> {
                     ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
                 }
@@ -2189,16 +2095,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u16> {
-                    ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u16> {
                     ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
                 }
@@ -2347,16 +2243,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
                 }
@@ -2376,15 +2262,6 @@ mod tests {
                 /// Gets the value of the field.
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> A {
-                    unsafe { ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8).unwrap_unchecked() }
-                }
-
-                /// Gets the value of the field.
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> A {
                     unsafe { ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8).unwrap_unchecked() }
                 }
@@ -2408,16 +2285,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
                 }
@@ -2438,16 +2305,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn test_get(&self) -> ::core::result::Result<A, i8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as i8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn test_get(&self) -> ::core::result::Result<A, i8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as i8)
                 }
@@ -2936,16 +2793,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn get(&self) -> ::core::result::Result<B, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -2965,16 +2812,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn get(&self) -> ::core::result::Result<B, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -3138,16 +2975,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn b(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn b(&self) -> ::core::result::Result<B, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -3167,16 +2994,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn b(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn b(&self) -> ::core::result::Result<B, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -3268,16 +3085,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn c(&self) -> ::core::result::Result<C, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn c(&self) -> ::core::result::Result<C, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -3371,16 +3178,6 @@ mod tests {
                 #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
-                #[cfg(const_trait_impl)]
-                const fn c(&self) -> ::core::result::Result<C, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
-                }
-
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                #[cfg(not(const_trait_impl))]
                 fn c(&self) -> ::core::result::Result<C, u8> {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
@@ -5770,17 +5567,6 @@ mod tests {
                     #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                     #[allow(unused)]
                     #[inline(always)]
-                    #[cfg(const_trait_impl)]
-                    pub const fn r#c(&self) -> ::core::result::Result<C, u8> {
-                        ::core::convert::TryFrom::try_from(self._field(7u8, 3u8) as u8)
-                    }
-
-                    #[doc = " D3 "]
-                    /// Gets the value of the field.
-                    #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                    #[allow(unused)]
-                    #[inline(always)]
-                    #[cfg(not(const_trait_impl))]
                     pub fn r#c(&self) -> ::core::result::Result<C, u8> {
                         ::core::convert::TryFrom::try_from(self._field(7u8, 3u8) as u8)
                     }
@@ -6248,17 +6034,6 @@ mod tests {
                     #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                     #[allow(unused)]
                     #[inline(always)]
-                    #[cfg(const_trait_impl)]
-                    pub const fn c(&self) -> ::core::result::Result<C, u8> {
-                        ::core::convert::TryFrom::try_from(self._field(7u8, 3u8) as u8)
-                    }
-
-                    #[doc = " D3 "]
-                    /// Gets the value of the field.
-                    #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                    #[allow(unused)]
-                    #[inline(always)]
-                    #[cfg(not(const_trait_impl))]
                     pub fn c(&self) -> ::core::result::Result<C, u8> {
                         ::core::convert::TryFrom::try_from(self._field(7u8, 3u8) as u8)
                     }

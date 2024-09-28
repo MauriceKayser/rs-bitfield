@@ -816,9 +816,9 @@
 /// accessor methods are generated:
 ///
 /// ```rust,ignore
-/// // NOTE: This method is `const` only if the `#![feature(const_trait_impl)]` from
-/// // https://github.com/rust-lang/rust/pull/68847 is used because `core::convert::TryFrom` is
-/// // used under the hood to convert the primitve value to an enumeration variant.
+/// // NOTE: This method is not `const` until https://github.com/rust-lang/rust-project-goals/issues/106
+/// // is merged, because `core::convert::TryFrom` is used under the hood to convert the primitve
+/// // value to an enumeration variant.
 /// //
 /// /// Returns the primitive value encapsulated in the `Err` variant, if the value can
 /// /// not be converted to the expected type.
@@ -868,9 +868,9 @@
 /// following accessor methods to be generated:
 ///
 /// ```rust,ignore
-/// // NOTE: This method is `const` only if the `#![feature(const_trait_impl)]` from
-/// // https://github.com/rust-lang/rust/pull/68847 is used because `core::convert::TryFrom` is
-/// // used under the hood to convert the primitve value to an enumeration variant.
+/// // NOTE: This method is not `const` until https://github.com/rust-lang/rust-project-goals/issues/106
+/// // is merged, because `core::convert::TryFrom` is used under the hood to convert the primitve
+/// // value to an enumeration variant.
 /// //
 /// /// Returns the primitive value encapsulated in the `Err` variant, if the value can
 /// /// not be converted to the expected type.
@@ -954,7 +954,7 @@
 /// and flags, a few `core::ops::*` trait implementations are generated.
 ///
 /// *Note*: These shortcuts can not yet be used in a `const` context until traits can be implemented
-/// in a `const` way, see [RFC-2632](https://github.com/rust-lang/rfcs/pull/2632).
+/// in a `const` way, see [Const traits](https://github.com/rust-lang/rust-project-goals/issues/106).
 ///
 /// #### 2.2.3.1 Flags
 ///

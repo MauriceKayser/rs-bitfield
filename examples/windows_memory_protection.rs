@@ -47,7 +47,7 @@ struct Protection {
 
 // Getters for specific access flags.
 impl Protection {
-    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
+    // TODO: Add `const` when https://github.com/rust-lang/rust-project-goals/issues/106 is merged.
     fn copy_on_write(&self) -> bool {
         match self.access() {
             Ok(Access::ReadWriteCopy) |
@@ -56,7 +56,7 @@ impl Protection {
         }
     }
 
-    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
+    // TODO: Add `const` when https://github.com/rust-lang/rust-project-goals/issues/106 is merged.
     fn execute(&self) -> bool {
         match self.access() {
             Ok(Access::Execute) |
@@ -67,7 +67,7 @@ impl Protection {
         }
     }
 
-    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
+    // TODO: Add `const` when https://github.com/rust-lang/rust-project-goals/issues/106 is merged.
     fn read(&self) -> bool {
         match self.access() {
             Ok(Access::Read) |
@@ -82,7 +82,7 @@ impl Protection {
         }
     }
 
-    // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
+    // TODO: Add `const` when https://github.com/rust-lang/rust-project-goals/issues/106 is merged.
     fn write(&self) -> bool {
         match self.access() {
             Ok(Access::ReadWrite) |

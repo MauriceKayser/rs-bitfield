@@ -1279,11 +1279,7 @@ mod tests {
         assert_eq!(core::mem::size_of_val(&Some(unsafe { BitField64::new() })), 8);
         assert_eq!(core::mem::size_of_val(&unsafe { BitField128::new() }), 16);
         assert_eq!(core::mem::size_of_val(&Some(unsafe { BitField128::new() })), 16);
-        #[cfg(target_pointer_width = "8")]
-        {
-            assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 1);
-            assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 1);
-        }
+
         #[cfg(target_pointer_width = "16")]
         {
             assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 2);
@@ -1299,21 +1295,12 @@ mod tests {
             assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 8);
             assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 8);
         }
-        #[cfg(target_pointer_width = "128")]
-        {
-            assert_eq!(core::mem::size_of_val(&unsafe { BitFieldSize::new() }), 16);
-            assert_eq!(core::mem::size_of_val(&Some(unsafe { BitFieldSize::new() })), 16);
-        }
     }
 
     #[test]
     fn ui() {
         trybuild::TestCases::new().compile_fail("tests/ui/bitfield/*.rs");
 
-        #[cfg(target_pointer_width = "8")]
-        trybuild::TestCases::new().compile_fail(
-            "tests/ui/bitfield/architecture/field_uses_whole_bit_field_8.rs"
-        );
         #[cfg(target_pointer_width = "16")]
         trybuild::TestCases::new().compile_fail(
             "tests/ui/bitfield/architecture/field_uses_whole_bit_field_16.rs"
@@ -1325,10 +1312,6 @@ mod tests {
         #[cfg(target_pointer_width = "64")]
         trybuild::TestCases::new().compile_fail(
             "tests/ui/bitfield/architecture/field_uses_whole_bit_field_64.rs"
-        );
-        #[cfg(target_pointer_width = "128")]
-        trybuild::TestCases::new().compile_fail(
-            "tests/ui/bitfield/architecture/field_uses_whole_bit_field_128.rs"
         );
     }
 }

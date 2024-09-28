@@ -8,7 +8,7 @@ impl super::Enumeration {
         let span = repr.span();
         let variants = &self.variants;
 
-        // TODO: Add `const` when https://github.com/rust-lang/rfcs/pull/2632 is merged.
+        // TODO: Add `const` when https://github.com/rust-lang/rust-project-goals/issues/106 is merged.
         quote::quote_spanned!(span =>
             impl ::core::convert::TryFrom<#repr> for #ident {
                 type Error = #repr;
