@@ -23,10 +23,10 @@ extern crate alloc;
 #[bitfield::bitfield(8)]
 #[derive(Debug)]
 struct Styles {
-    #[field(size = 3)]
+    #[field(size = 3, complete)]
     foreground: Color,
     foreground_bright: bool,
-    #[field(size = 3)]
+    #[field(size = 3, complete)]
     background: Color,
     blink: bool
 }

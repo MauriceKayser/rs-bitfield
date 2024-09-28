@@ -27,7 +27,7 @@ struct NtStatus {
     facility: Facility,
     reserved: bool,
     customer: bool,
-    #[field(size = 2)]
+    #[field(size = 2, complete)]
     severity: Severity
 }
 

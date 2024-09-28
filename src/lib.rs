@@ -906,6 +906,48 @@
 /// assert_eq!(field.get(), Ok(Field::One));
 /// ```
 ///
+/// #### 2.2.2.6 Complete enumerations
+///
+/// As described previously, the getter of an enumeration value returns a
+/// `core::result::Result<#FIELD_TYPE, #PRIMITIVE_TYPE>` by default. The `Result`
+/// overhead can be avoided for enumerations which have a variant for all bit
+/// combinations of a field.
+///
+/// Example:
+///
+/// ```rust
+/// #[bitfield::bitfield(8)]
+/// struct BitField {
+///     #[field(size = 2)]           field_normal:     FieldComplete,
+///     #[field(size = 2, complete)] field_complete:   FieldComplete,
+///     #[field(size = 2)]           field_incomplete: FieldIncomplete,
+/// //  #[field(size = 2, complete)] field_invalid:    FieldIncomplete,
+/// }
+///
+/// #[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
+/// #[repr(u8)]
+/// enum FieldComplete {
+///     Zero, // 0b00
+///     One,  // 0b01
+///     Two,  // 0b10
+///     Three // 0b11
+/// }
+///
+/// #[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
+/// #[repr(u8)]
+/// enum FieldIncomplete {
+///     // 0 is unused.
+///     One = 1, // 0b01
+///     Two,     // 0b10
+///     Three    // 0b11
+/// }
+///
+/// let field = BitField::new();
+/// assert_eq!(field.field_normal(),      Ok(FieldComplete::Zero));
+/// assert_eq!(field.field_complete(),       FieldComplete::Zero );
+/// assert_eq!(field.field_incomplete(), Err(         0         ));
+/// ```
+///
 /// ### 2.2.3 `core::ops::*` implementations
 ///
 /// Bit fields can be manipulated in a less verbose way than previously presented. For most fields
@@ -1116,6 +1158,9 @@ pub fn bitfield(
 /// ```ignore
 /// /// Returns true if the enumeration is represented by a signed primitive type.
 /// const fn is_signed() -> bool;
+///
+/// /// Returns an array containing all enumeration variants in the defined order.
+/// const fn iter() -> &'static [Self];
 /// ```
 ///
 /// A `core::convert::TryFrom<#REPR_TYPE>` implementation with `Error = #REPR_TYPE` is generated.
@@ -1161,6 +1206,12 @@ pub fn bitfield(
 ///     const fn is_signed() -> bool {
 ///         false
 ///     }
+///
+///     /// Returns an array containing all enumeration variants in the defined order.
+///     #[inline(always)]
+///     const fn iter() -> &'static [Self] {
+///         &[Self::Variant1, Self::Variant2, Self::Variant5]
+///     }
 /// }
 ///
 /// impl ::core::convert::TryFrom<u8> for UnsignedField {
@@ -1189,6 +1240,12 @@ pub fn bitfield(
 ///     #[inline(always)]
 ///     const fn is_signed() -> bool {
 ///         true
+///     }
+///
+///     /// Returns an array containing all enumeration variants in the defined order.
+///     #[inline(always)]
+///     const fn iter() -> &'static [Self] {
+///         &[Self::VariantMinus1, Self::Variant1]
 ///     }
 /// }
 ///
@@ -1332,14 +1389,14 @@ pub fn field(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 ///     /// Returns an array containing all enumeration variants in the defined order.
 ///     #[inline(always)]
 ///     const fn iter() -> &'static [Self] {
-///         &[Flag::Flag1, Flag::Flag2, Flag::Flag5]
+///         &[Self::Flag1, Self::Flag2, Self::Flag5]
 ///     }
 ///
 ///     /// Returns the flag with the highest bit value.
 ///     #[inline(always)]
 ///     const fn max() -> Self {
 ///         let mut i = 0;
-///         let mut max = Flag::Flag1;
+///         let mut max = Self::Flag1;
 ///
 ///         while i < Self::iter().len() {
 ///             let current = Self::iter()[i];

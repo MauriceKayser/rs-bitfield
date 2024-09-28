@@ -3,7 +3,6 @@
 impl super::Flags {
     /// Generates a `const fn iter() -> &'static [Self]` implementation.
     fn generate_iter(&self) -> proc_macro2::TokenStream {
-        let ident = &self.0.ident;
         let variants = &self.0.variants;
         let vis = &self.0.vis;
 
@@ -11,14 +10,13 @@ impl super::Flags {
             /// Returns an array containing all enumeration variants in the defined order.
             #[inline(always)]
             #vis const fn iter() -> &'static [Self] {
-                &[#(#ident::#variants),*]
+                &[#(Self::#variants),*]
             }
         )
     }
 
     /// Generates a `const fn max() -> Self` implementation.
     fn generate_max(&self) -> proc_macro2::TokenStream {
-        let ident = &self.0.ident;
         let first = &self.0.variants.first().unwrap();
         let vis = &self.0.vis;
 
@@ -27,7 +25,7 @@ impl super::Flags {
             #[inline(always)]
             #vis const fn max() -> Self {
                 let mut i = 0;
-                let mut max = #ident::#first;
+                let mut max = Self::#first;
 
                 while i < Self::iter().len() {
                     let current = Self::iter()[i];
@@ -90,7 +88,7 @@ mod tests {
             /// Returns an array containing all enumeration variants in the defined order.
             #[inline(always)]
             const fn iter() -> &'static [Self] {
-                &[ A::B ]
+                &[ Self::B ]
             }
         });
 
@@ -99,8 +97,8 @@ mod tests {
             #[inline(always)]
             pub const fn iter() -> &'static [Self] {
                 &[
-                    B::C,
-                    B::D
+                    Self::C,
+                    Self::D
                 ]
             }
         });
@@ -113,7 +111,7 @@ mod tests {
             #[inline(always)]
             pub const fn max() -> Self {
                 let mut i = 0;
-                let mut max = A::B;
+                let mut max = Self::B;
 
                 while i < Self::iter().len() {
                     let current = Self::iter()[i];
@@ -133,7 +131,7 @@ mod tests {
             #[inline(always)]
             const fn max() -> Self {
                 let mut i = 0;
-                let mut max = B::C;
+                let mut max = Self::C;
 
                 while i < Self::iter().len() {
                     let current = Self::iter()[i];
@@ -161,9 +159,9 @@ mod tests {
                     #[inline(always)]
                     const fn iter() -> &'static [Self] {
                         &[
-                            C::D,
-                            C::E,
-                            C::F
+                            Self::D,
+                            Self::E,
+                            Self::F
                         ]
                     }
 
@@ -171,7 +169,7 @@ mod tests {
                     #[inline(always)]
                     const fn max() -> Self {
                         let mut i = 0;
-                        let mut max = C::D;
+                        let mut max = Self::D;
 
                         while i < Self::iter().len() {
                             let current = Self::iter()[i];

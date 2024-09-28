@@ -548,6 +548,27 @@ mod tests {
     }
 
     #[test]
+    fn debug_tuple_field_complete_enum() {
+        #[bitfield::bitfield(8)]
+        #[derive(Debug)]
+        struct BitFieldIncomplete(#[field(3, 1)] Field2);
+
+        #[bitfield::bitfield(8)]
+        #[derive(Debug)]
+        struct BitFieldComplete(#[field(3, 1, complete)] Field2);
+
+        let field_incomplete = BitFieldIncomplete::new();
+        let field_complete = BitFieldComplete::new();
+
+        // The complete field does not wrap the return value in a `Result`.
+        assert_eq!(field_incomplete.get(), Ok(Field2::F0));
+        assert_eq!(field_complete.get(), Field2::F0);
+
+        assert_print_eq!(field_incomplete, "{:?}", 0, "BitFieldIncomplete { Field2: F0 }");
+        assert_print_eq!(field_complete, "{:?}", 0, "BitFieldComplete { Field2: F0 }");
+    }
+
+    #[test]
     fn debug_tuple_field_signed_enum() {
         #[bitfield::bitfield(16)]
         #[derive(Debug)]

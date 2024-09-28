@@ -5,16 +5,27 @@ impl super::Field {
     fn generate_is_signed(&self) -> proc_macro2::TokenStream {
         let is_signed = crate::primitive::is_signed_primitive(&self.0.repr);
 
-        let ident = &self.0.ident;
         let vis = &self.0.vis;
 
         quote::quote!(
-            impl #ident {
-                /// Returns true if the enumeration is represented by a signed primitive type.
-                #[inline(always)]
-                #vis const fn is_signed() -> bool {
-                    #is_signed
-                }
+            /// Returns true if the enumeration is represented by a signed primitive type.
+            #[inline(always)]
+            #vis const fn is_signed() -> bool {
+                #is_signed
+            }
+        )
+    }
+
+    /// Generates a `const fn iter() -> &'static [Self]` implementation.
+    fn generate_iter(&self) -> proc_macro2::TokenStream {
+        let variants = &self.0.variants;
+        let vis = &self.0.vis;
+
+        quote::quote!(
+            /// Returns an array containing all enumeration variants in the defined order.
+            #[inline(always)]
+            #vis const fn iter() -> &'static [Self] {
+                &[#(Self::#variants),*]
             }
         )
     }
@@ -23,11 +34,18 @@ impl super::Field {
 /// Generates the user code for the parsed field of a bit field.
 impl core::convert::Into<proc_macro2::TokenStream> for super::Field {
     fn into(self) -> proc_macro2::TokenStream {
+        let ident = &self.0.ident;
+
         let is_signed = self.generate_is_signed();
+        let iter = self.generate_iter();
         let try_from = self.0.generate_try_from();
 
         quote::quote! {
-            #is_signed
+            impl #ident {
+                #is_signed
+                #iter
+            }
+
             #try_from
         }
     }
@@ -59,32 +77,48 @@ mod tests {
     #[test]
     fn is_signed() {
         assert_compare!(generate_is_signed, "#[repr(u8)] enum A { B }", quote::quote! {
-            impl A {
-                /// Returns true if the enumeration is represented by a signed primitive type.
-                #[inline(always)]
-                const fn is_signed() -> bool {
-                    false
-                }
+            /// Returns true if the enumeration is represented by a signed primitive type.
+            #[inline(always)]
+            const fn is_signed() -> bool {
+                false
             }
         });
 
         assert_compare!(generate_is_signed, "#[repr(u8)] pub enum A { B }", quote::quote! {
-            impl A {
-                /// Returns true if the enumeration is represented by a signed primitive type.
-                #[inline(always)]
-                pub const fn is_signed() -> bool {
-                    false
-                }
+            /// Returns true if the enumeration is represented by a signed primitive type.
+            #[inline(always)]
+            pub const fn is_signed() -> bool {
+                false
             }
         });
 
         assert_compare!(generate_is_signed, "#[repr(i8)] enum A { B }", quote::quote! {
-            impl A {
-                /// Returns true if the enumeration is represented by a signed primitive type.
-                #[inline(always)]
-                const fn is_signed() -> bool {
-                    true
-                }
+            /// Returns true if the enumeration is represented by a signed primitive type.
+            #[inline(always)]
+            const fn is_signed() -> bool {
+                true
+            }
+        });
+    }
+
+    #[test]
+    fn iter() {
+        assert_compare!(generate_iter, "#[repr(u8)] enum A { B }", quote::quote! {
+            /// Returns an array containing all enumeration variants in the defined order.
+            #[inline(always)]
+            const fn iter() -> &'static [Self] {
+                &[ Self::B ]
+            }
+        });
+
+        assert_compare!(generate_iter, "#[repr(u8)] pub enum B { C, D = 6 }", quote::quote! {
+            /// Returns an array containing all enumeration variants in the defined order.
+            #[inline(always)]
+            pub const fn iter() -> &'static [Self] {
+                &[
+                    Self::C,
+                    Self::D
+                ]
             }
         });
     }
@@ -101,6 +135,12 @@ mod tests {
                     #[inline(always)]
                     const fn is_signed() -> bool {
                         false
+                    }
+
+                    /// Returns an array containing all enumeration variants in the defined order.
+                    #[inline(always)]
+                    const fn iter() -> &'static [Self] {
+                        &[ Self::D ]
                     }
                 }
 

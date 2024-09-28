@@ -84,13 +84,13 @@ enum Status {
 #[derive(Debug)]
 struct DebugControl {
     flag: Control,
-    #[field(16, 2)] type0: BreakPointType,
+    #[field(16, 2, complete)] type0: BreakPointType,
     #[field(size = 2)] length0: BreakPointLength,
-    #[field(size = 2)] type1: BreakPointType,
+    #[field(size = 2, complete)] type1: BreakPointType,
     #[field(size = 2)] length1: BreakPointLength,
-    #[field(size = 2)] type2: BreakPointType,
+    #[field(size = 2, complete)] type2: BreakPointType,
     #[field(size = 2)] length2: BreakPointLength,
-    #[field(size = 2)] type3: BreakPointType,
+    #[field(size = 2, complete)] type3: BreakPointType,
     #[field(size = 2)] length3: BreakPointLength
 }
 

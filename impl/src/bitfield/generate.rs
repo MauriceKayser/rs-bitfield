@@ -280,26 +280,38 @@ impl super::BitField {
             );
 
             let body_span = ty.span();
-            let body = quote::quote_spanned!(body_span => ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive));
+
+            let (body, getter_type, doc) = match field.complete.is_some() {
+                false => (
+                    quote::quote_spanned!(body_span => ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive)),
+                    quote::quote_spanned!(body_span => ::core::result::Result<#ty, #primitive>),
+                    quote::quote_spanned!(body_span => #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."])
+                ),
+                true => (
+                    quote::quote_spanned!(body_span => unsafe { ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive).unwrap_unchecked() }),
+                    quote::quote_spanned!(body_span => #ty),
+                    quote::quote!()
+                )
+            };
 
             quote::quote_spanned! { span =>
                 #(#attrs)*
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #doc
                 #[allow(unused)]
                 #[inline(always)]
                 // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
                 #[cfg(const_trait_impl)]
-                #vis const fn #getter(&self) -> ::core::result::Result<#ty, #primitive> { #body }
+                #vis const fn #getter(&self) -> #getter_type { #body }
 
                 // TODO: Remove when https://github.com/rust-lang/rfcs/pull/2632 is merged.
                 #(#attrs)*
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #doc
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
-                #vis fn #getter(&self) -> ::core::result::Result<#ty, #primitive> { #body }
+                #vis fn #getter(&self) -> #getter_type { #body }
 
                 #(#attrs)*
                 /// Creates a copy of the bit field with the new value.
@@ -785,6 +797,21 @@ impl super::BitField {
                         ))
                     }).unwrap_or_default();
 
+                // Only generate this check for complete fields.
+                let complete_no_gap = field.complete.as_ref().map(|complete| {
+                    let ty = &entry.ty;
+
+                    generate_assertion(
+                        &syn::Ident::new(&format!("_COMPLETE_FIELD_{i}_MUST_NOT_HAVE_GAPS"), complete.span()),
+                        "Complete field must not have gaps",
+                        quote::quote! {{
+                            // Enumerations can not contain multiple variants with the same discriminator, so using the length should be fine.
+                            #ty::iter().len() == 1_usize << #size
+                        }},
+                        complete.span()
+                    )
+                });
+
                 // Only generate the next assertions if this can not be checked in the parsing phase,
                 // aka. when the primitive base type is `usize`.
                 if self.attr.bits.is_some() {
@@ -792,6 +819,8 @@ impl super::BitField {
                         #field_assertion
 
                         #signed_size_assertion
+
+                        #complete_no_gap
                     }
                 }
 
@@ -815,6 +844,8 @@ impl super::BitField {
                     #field_assertion
 
                     #signed_size_assertion
+
+                    #complete_no_gap
 
                     #size_assertion
 
@@ -977,12 +1008,21 @@ impl super::BitField {
                 let value = self.#getter();
                 #print
             }
-        )).unwrap_or_else(|| quote::quote_spanned! { span =>
-            let value = self.#getter();
-            if let ::core::result::Result::Ok(value) = value {
-                #print
+        )).unwrap_or_else(|| {
+            if !entry.field.as_ref().map(|f| f.complete.is_some()).unwrap_or_default() {
+                quote::quote_spanned! { span =>
+                    let value = self.#getter();
+                    if let ::core::result::Result::Ok(value) = value {
+                        #print
+                    } else {
+                        #print
+                    }
+                }
             } else {
-                #print
+                quote::quote_spanned! { span =>
+                    let value = self.#getter();
+                    #print
+                }
             }
         })
     }
@@ -1545,8 +1585,8 @@ mod tests {
             "8", "struct A(#[some_attribute1] #[some_attribute2] #[field(0, 1)] A);", true, quote::quote! {
                 #[some_attribute1]
                 #[some_attribute2]
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -1556,8 +1596,8 @@ mod tests {
 
                 #[some_attribute1]
                 #[some_attribute2]
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -1580,8 +1620,8 @@ mod tests {
             "NonZero8", "struct A(#[some_attribute1] #[some_attribute2] #[field(0, 1)] A);", true, quote::quote! {
                 #[some_attribute1]
                 #[some_attribute2]
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -1591,8 +1631,8 @@ mod tests {
 
                 #[some_attribute1]
                 #[some_attribute2]
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -1690,8 +1730,8 @@ mod tests {
 
         assert_accessor!(
             "8", "struct A(#[field(0, 1)] pub A);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -1699,8 +1739,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -1859,8 +1899,8 @@ mod tests {
 
         assert_accessor!(
             "8", "struct A(#[field(0, 1)] B);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -1868,8 +1908,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -1888,8 +1928,8 @@ mod tests {
         );
         assert_accessor!(
             "NonZero8", "struct A(#[field(0, 1)] B);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -1897,8 +1937,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2057,8 +2097,8 @@ mod tests {
 
         assert_accessor!(
             "32", "struct A(#[field(0, 1)] A);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2066,8 +2106,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2086,8 +2126,8 @@ mod tests {
         );
         assert_accessor!(
             "NonZero32", "struct A(#[field(0, 1)] A);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2095,8 +2135,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2116,8 +2156,8 @@ mod tests {
 
         assert_accessor!(
             "32", "struct A(#[field(1, 9)] A);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2125,8 +2165,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2145,8 +2185,8 @@ mod tests {
         );
         assert_accessor!(
             "NonZero32", "struct A(#[field(1, 9)] A);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2154,8 +2194,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2300,11 +2340,11 @@ mod tests {
     }
 
     #[test]
-    fn accessor_signed() {
+    fn accessor_complete() {
         assert_accessor!(
             "32", "struct A(#[field(0, 8)] A);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2312,8 +2352,69 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
+                #[allow(unused)]
+                #[inline(always)]
+                #[cfg(not(const_trait_impl))]
+                fn test_get(&self) -> ::core::result::Result<A, u8> {
+                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
+                }
+
+                /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn test_set(&self, value: A) -> Self {
+                    self._set_field(0u8, 8u8, value as _)
+                }
+            }
+        );
+
+        assert_accessor!(
+            "32", "struct A(#[field(0, 8, complete)] A);", true, quote::quote! {
+                /// Gets the value of the field.
+                #[allow(unused)]
+                #[inline(always)]
+                #[cfg(const_trait_impl)]
+                const fn test_get(&self) -> A {
+                    unsafe { ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8).unwrap_unchecked() }
+                }
+
+                /// Gets the value of the field.
+                #[allow(unused)]
+                #[inline(always)]
+                #[cfg(not(const_trait_impl))]
+                fn test_get(&self) -> A {
+                    unsafe { ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8).unwrap_unchecked() }
+                }
+
+                /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn test_set(&self, value: A) -> Self {
+                    self._set_field(0u8, 8u8, value as _)
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn accessor_signed() {
+        assert_accessor!(
+            "32", "struct A(#[field(0, 8)] A);", true, quote::quote! {
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
+                #[allow(unused)]
+                #[inline(always)]
+                #[cfg(const_trait_impl)]
+                const fn test_get(&self) -> ::core::result::Result<A, u8> {
+                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
+                }
+
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2333,8 +2434,8 @@ mod tests {
 
         assert_accessor!(
             "32", "struct A(#[field(0, 8, signed)] A);", true, quote::quote! {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2342,8 +2443,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as i8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2831,8 +2932,8 @@ mod tests {
 
         assert_compare!(generate_accessors, "8", "struct A(#[field(0, 1)] B);", quote::quote! {
             impl A {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2840,8 +2941,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -2860,8 +2961,8 @@ mod tests {
         });
         assert_compare!(generate_accessors, "NonZero8", "struct A(#[field(0, 1)] B);", quote::quote! {
             impl A {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -2869,8 +2970,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -3033,8 +3134,8 @@ mod tests {
 
         assert_compare!(generate_accessors, "8", "struct A {#[field(0, 1)] b: B}", quote::quote! {
             impl A {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -3042,8 +3143,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -3062,8 +3163,8 @@ mod tests {
         });
         assert_compare!(generate_accessors, "NonZero8", "struct A {#[field(0, 1)] b: B}", quote::quote! {
             impl A {
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -3071,8 +3172,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -3163,8 +3264,8 @@ mod tests {
                     self._invert_bit(flag as _)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -3172,8 +3273,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -3266,8 +3367,8 @@ mod tests {
                     self._invert_bit(flag as _)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(const_trait_impl)]
@@ -3275,8 +3376,8 @@ mod tests {
                     ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
                 }
 
-                /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                /// not be converted to the expected type.
+                /// Gets the value of the field.
+                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                 #[allow(unused)]
                 #[inline(always)]
                 #[cfg(not(const_trait_impl))]
@@ -4854,6 +4955,26 @@ mod tests {
                 }
             }
         );
+
+        assert_compare!(
+            generate_assertions, "8", "struct A(#[field(2, 5, complete)] B);", quote::quote! {
+                impl A {
+                    const _TYPE_IN_FIELD_0_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_5_BITS: [();
+                        if ::core::mem::size_of::<B>() * 8 >= 5 { 0 } else { panic!("Type is smaller than the specified size of 5 bits") }
+                    ] = [];
+
+                    const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [();
+                        if !B::is_signed() || ::core::mem::size_of::<B>() * 8 == 5 { 0 } else { panic!("Signed type can never be negative") }
+                    ] = [];
+
+                    const _COMPLETE_FIELD_0_MUST_NOT_HAVE_GAPS: [();
+                        if {
+                            B::iter().len() == 1_usize << 5
+                        } { 0 } else { panic!("Complete field must not have gaps") }
+                    ] = [];
+                }
+            }
+        )
     }
 
     #[test]
@@ -4898,6 +5019,22 @@ mod tests {
             generate_debug, "8", "#[derive(Debug)] struct A(#[field(0, 1)] super::B);", &b_debug
         );
 
+        assert_compare!(
+            generate_debug, "8", "#[derive(Debug)] struct A(#[field(0, 1, complete)] B);",
+            quote::quote! {
+                impl ::core::fmt::Debug for A {
+                    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                        let mut s = f.debug_struct(::core::stringify!(A));
+
+                        let value = self.get();
+                        s.field(::core::stringify!(B), &value);
+
+                        s.finish()
+                    }
+                }
+            }
+        );
+
         assert_compare!(generate_debug, "8", "#[derive(Debug)] struct A {}", quote::quote! {
             impl ::core::fmt::Debug for A {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
@@ -4922,6 +5059,22 @@ mod tests {
                         } else {
                             s.field(::core::stringify!(b), &value);
                         }
+
+                        s.finish()
+                    }
+                }
+            }
+        );
+
+        assert_compare!(
+            generate_debug, "8", "#[derive(Debug)] struct A { #[field(0, 1, complete)] b: B }",
+            quote::quote! {
+                impl ::core::fmt::Debug for A {
+                    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                        let mut s = f.debug_struct(::core::stringify!(A));
+
+                        let value = self.b();
+                        s.field(::core::stringify!(b), &value);
 
                         s.finish()
                     }
@@ -5218,6 +5371,18 @@ mod tests {
         );
 
         assert_compare!(
+            generate_display, "8", "#[derive(Display)] struct A(#[field(0, 1, complete)] B);",
+            quote::quote! {
+                impl ::core::fmt::Display for A {
+                    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                        let value = self.get();
+                        f.write_str(&alloc::format!("{:?}", value))
+                    }
+                }
+            }
+        );
+
+        assert_compare!(
             generate_display, "8", "#[derive(Display)] struct A { #[field(0, 1)] b: B }",
             quote::quote! {
                 impl ::core::fmt::Display for A {
@@ -5229,6 +5394,18 @@ mod tests {
                         } else {
                             f.write_str(&alloc::format!("{:?}", value))
                         }
+                    }
+                }
+            }
+        );
+
+        assert_compare!(
+            generate_display, "8", "#[derive(Display)] struct A { #[field(0, 1, complete)] b: B }",
+            quote::quote! {
+                impl ::core::fmt::Display for A {
+                    fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                        let value = self.b();
+                        f.write_str(&alloc::format!("{:?}", value))
                     }
                 }
             }
@@ -5589,8 +5766,8 @@ mod tests {
                     }
 
                     #[doc = " D3 "]
-                    /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                    /// not be converted to the expected type.
+                    /// Gets the value of the field.
+                    #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                     #[allow(unused)]
                     #[inline(always)]
                     #[cfg(const_trait_impl)]
@@ -5599,8 +5776,8 @@ mod tests {
                     }
 
                     #[doc = " D3 "]
-                    /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                    /// not be converted to the expected type.
+                    /// Gets the value of the field.
+                    #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                     #[allow(unused)]
                     #[inline(always)]
                     #[cfg(not(const_trait_impl))]
@@ -6067,8 +6244,8 @@ mod tests {
                     }
 
                     #[doc = " D3 "]
-                    /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                    /// not be converted to the expected type.
+                    /// Gets the value of the field.
+                    #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                     #[allow(unused)]
                     #[inline(always)]
                     #[cfg(const_trait_impl)]
@@ -6077,8 +6254,8 @@ mod tests {
                     }
 
                     #[doc = " D3 "]
-                    /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-                    /// not be converted to the expected type.
+                    /// Gets the value of the field.
+                    #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
                     #[allow(unused)]
                     #[inline(always)]
                     #[cfg(not(const_trait_impl))]
