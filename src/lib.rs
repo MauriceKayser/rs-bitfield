@@ -767,7 +767,7 @@
 /// /// Creates a copy of the bit field with the new value.
 /// ///
 /// /// Returns `None` if `value` is bigger than the specified amount of
-/// /// bits for the field can store.
+/// /// bits the field can store.
 /// const fn #SETTER(&self, value: #PRIMITIVE_TYPE) -> core::option::Option<Self>;
 /// ```
 ///
@@ -1156,11 +1156,11 @@ pub fn bitfield(
 /// The following methods are generated:
 ///
 /// ```ignore
-/// /// Returns true if the enumeration is represented by a signed primitive type.
-/// const fn is_signed() -> bool;
-///
 /// /// Returns an array containing all enumeration variants in the defined order.
 /// const fn iter() -> &'static [Self];
+///
+/// /// Returns the amount of bits this type uses as a field.
+/// const fn size() -> u8;
 /// ```
 ///
 /// A `core::convert::TryFrom<#REPR_TYPE>` implementation with `Error = #REPR_TYPE` is generated.
@@ -1201,16 +1201,32 @@ pub fn bitfield(
 /// #     Variant1 = 1
 /// # }
 /// impl UnsignedField {
-///     /// Returns true if the enumeration is represented by a signed primitive type.
-///     #[inline(always)]
-///     const fn is_signed() -> bool {
-///         false
-///     }
-///
 ///     /// Returns an array containing all enumeration variants in the defined order.
 ///     #[inline(always)]
 ///     const fn iter() -> &'static [Self] {
 ///         &[Self::Variant1, Self::Variant2, Self::Variant5]
+///     }
+///
+///     /// Returns the amount of bits this type uses as a field.
+///     #[inline(always)]
+///     const fn size() -> u8 {
+///         let mut max = Self::iter()[0] as u8;
+///
+///         let mut i = 1;
+///         while i < Self::iter().len() {
+///             let current = Self::iter()[i];
+///
+///             if current as u8 > max {
+///                 max = current as u8;
+///             }
+///
+///             i += 1;
+///         }
+///
+///         match max {
+///             0 => 1,
+///             _ => max.ilog2() as u8 + 1
+///         }
 ///     }
 /// }
 ///
@@ -1236,16 +1252,40 @@ pub fn bitfield(
 /// }
 ///
 /// impl SignedField {
-///     /// Returns true if the enumeration is represented by a signed primitive type.
-///     #[inline(always)]
-///     const fn is_signed() -> bool {
-///         true
-///     }
-///
 ///     /// Returns an array containing all enumeration variants in the defined order.
 ///     #[inline(always)]
 ///     const fn iter() -> &'static [Self] {
 ///         &[Self::VariantMinus1, Self::Variant1]
+///     }
+///
+///     /// Returns the amount of bits this type uses as a field.
+///     #[inline(always)]
+///     const fn size() -> u8 {
+///         let mut i = 0;
+///         while i < Self::iter().len() {
+///             if (Self::iter()[i] as i8) < 0 {
+///                 return (core::mem::size_of::<Self>() * 8) as u8;
+///             }
+///             i += 1;
+///         }
+///
+///         let mut max = Self::iter()[0] as i8;
+///
+///         i = 1;
+///         while i < Self::iter().len() {
+///             let current = Self::iter()[i];
+///
+///             if current as i8 > max {
+///                 max = current as i8;
+///             }
+///
+///             i += 1;
+///         }
+///
+///         match max {
+///             0 => 1,
+///             _ => max.ilog2() as u8 + 1
+///         }
 ///     }
 /// }
 ///

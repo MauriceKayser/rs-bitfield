@@ -1298,6 +1298,19 @@ mod tests {
     }
 
     #[test]
+    fn variant_exceeds_field() {
+        // A positive test for the assertion.
+        #[bitfield::bitfield(32)]
+        struct BitField(#[field(size = 16, signed)] Field);
+
+        #[derive(Clone, Copy, Debug, bitfield::Field)]
+        #[repr(i16)]
+        enum Field {
+            F2 = -300
+        }
+    }
+
+    #[test]
     fn ui() {
         trybuild::TestCases::new().compile_fail("tests/ui/bitfield/*.rs");
 

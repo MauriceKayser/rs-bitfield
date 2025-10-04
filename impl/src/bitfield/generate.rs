@@ -107,17 +107,6 @@ impl super::BitField {
         }
     }
 
-    /// Returns the narrowest primitive size for a field.
-    fn field_primitive_size(size: u8) -> u8 {
-        const SIZES: &[u8] = &[8, 16, 32, 64, 128];
-
-        for s in SIZES {
-            if size <= *s { return *s; }
-        }
-
-        unimplemented!("field size {} > {}", size, SIZES.last().unwrap());
-    }
-
     /// Generates the accessors for a single entry.
     fn generate_accessor(
         &self,
@@ -150,16 +139,12 @@ impl super::BitField {
             let size = field.size.as_ref().unwrap().base10_parse::<u8>().unwrap();
 
             // Conversion for signed fields.
-            let primitive_size = super::BitField::field_primitive_size(size);
-
             let conversion = (
                 field.signed.is_some() ||
                 ty.get_ident().map(|i| crate::primitive::is_signed_primitive(i)).unwrap_or_default()
             ).then(|| {
-                let primitive_type = syn::Ident::new(
-                    &format!("u{}", primitive_size), field.size.as_ref().unwrap().span()
-                );
-                quote::quote!(as #primitive_type)
+                let unsigned_primitive_type = crate::primitive::type_from_bits(size, false, field.size.span());
+                quote::quote!(as #unsigned_primitive_type)
             });
 
             // Special handling for primitive types.
@@ -233,7 +218,7 @@ impl super::BitField {
                             /// Creates a copy of the bit field with the new value.
                             ///
                             /// Returns `None` if `value` is bigger than the specified amount of
-                            /// bits for the field can store.
+                            /// bits the field can store.
                             #[allow(unused)]
                             #[inline(always)]
                             #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -272,23 +257,18 @@ impl super::BitField {
             // Handling for non-primitive types.
 
             // Generate the minimal primitive type the field needs.
-            let primitive = syn::Ident::new(
-                &format!("{}{}",
-                    if field.signed.is_none() { 'u' } else { 'i' },
-                    primitive_size
-                ), field.size.span()
-            );
+            let primitive_type = crate::primitive::type_from_bits(size, field.signed.is_some(), field.size.span());
 
             let body_span = ty.span();
 
             let (body, getter_type, doc) = match field.complete.is_some() {
                 false => (
-                    quote::quote_spanned!(body_span => ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive)),
-                    quote::quote_spanned!(body_span => ::core::result::Result<#ty, #primitive>),
+                    quote::quote_spanned!(body_span => ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive_type)),
+                    quote::quote_spanned!(body_span => ::core::result::Result<#ty, #primitive_type>),
                     quote::quote_spanned!(body_span => #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."])
                 ),
                 true => (
-                    quote::quote_spanned!(body_span => unsafe { ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive).unwrap_unchecked() }),
+                    quote::quote_spanned!(body_span => unsafe { ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive_type).unwrap_unchecked() }),
                     quote::quote_spanned!(body_span => #ty),
                     quote::quote!()
                 )
@@ -764,27 +744,32 @@ impl super::BitField {
             if let Some(field) = &entry.field {
                 let bit = field.bit.as_ref().unwrap();
                 let size = field.size.as_ref().unwrap();
+                let size_value: u8 = size.base10_parse().unwrap();
 
-                // `bits_of(FieldType)` must not be < `field.size`.
+                // `size_of(FieldType)` must not be < `field.size`.
                 let field_assertion = generate_assertion(
-                    &syn::Ident::new(&format!("_TYPE_IN_FIELD_{i}_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_{size}_BITS"), ty.span()),
-                    &format!("Type is smaller than the specified size of {size} bits"),
+                    &syn::Ident::new(&format!("_TYPE_IN_FIELD_{i}_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_{size}_BIT{}", if size_value > 1 { "S" } else { "" }), ty.span()),
+                    &format!("Type is smaller than the specified size of {size} bit{}", if size_value > 1 { "s" } else { "" }),
                     quote::quote! { ::core::mem::size_of::<#ty>() * 8 >= #size },
                     ty.span()
                 );
 
                 // Only generate this check for non-primitive types.
-                let signed_size_assertion = ty.get_ident()
+                let non_primitive_assertion = ty.get_ident()
                     .map(|ident| !crate::primitive::is_primitive(ident))
                     .unwrap_or_default()
                     .then(|| {
-                        // If `FieldType` is signed, the `field.size` must be exactly `bits_of(FieldType)`.
-                        Some(generate_assertion(
-                            &syn::Ident::new(&format!("_SIGNED_TYPE_IN_FIELD_{i}_CAN_NEVER_BE_NEGATIVE"), size.span()),
-                            "Signed type can never be negative",
-                            quote::quote! { !#ty::is_signed() || ::core::mem::size_of::<#ty>() * 8 == #size },
-                            size.span()
-                        ))
+                        // `bit_count(FieldType)` must be <= `field.size`.
+                        let size_assertion = generate_assertion(
+                            &syn::Ident::new(&format!("_TYPE_IN_FIELD_{i}_EXCEEDS_FIELD_SIZE_OF_{size}_BIT{}", if size_value > 1 { "S" } else { "" }), ty.span()),
+                            &format!("Size of the field type exceeds the specified field size of {size} bit{}", if size_value > 1 { "s" } else { "" }),
+                            quote::quote! { #ty::size() <= #size },
+                            ty.span()
+                        );
+
+                        Some(quote::quote! {
+                            #size_assertion
+                        })
                     }).unwrap_or_default();
 
                 // Only generate this check for complete fields.
@@ -808,7 +793,7 @@ impl super::BitField {
                     return quote::quote! {
                         #field_assertion
 
-                        #signed_size_assertion
+                        #non_primitive_assertion
 
                         #complete_no_gap
                     }
@@ -833,7 +818,7 @@ impl super::BitField {
                 quote::quote! {
                     #field_assertion
 
-                    #signed_size_assertion
+                    #non_primitive_assertion
 
                     #complete_no_gap
 
@@ -1385,21 +1370,6 @@ mod tests {
                 );
                 index += 1;
             }
-        }
-    }
-
-    #[test]
-    fn field_primitive_size() {
-        const SIZES: &[(u8, u8)] = &[
-            ( 0,   8), ( 1,   8), (  7,   8), (  8,   8),
-            ( 9,  16), (10,  16), ( 15,  16), ( 16,  16),
-            (17,  32), (18,  32), ( 31,  32), ( 32,  32),
-            (33,  64), (34,  64), ( 63,  64), ( 64,  64),
-            (65, 128), (66, 128), (127, 128), (128, 128)
-        ];
-
-        for size in SIZES {
-            assert_eq!(BitField::field_primitive_size(size.0), size.1);
         }
     }
 
@@ -2169,7 +2139,7 @@ mod tests {
             /// Creates a copy of the bit field with the new value.
             ///
             /// Returns `None` if `value` is bigger than the specified amount of
-            /// bits for the field can store.
+            /// bits the field can store.
             #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -2190,7 +2160,7 @@ mod tests {
             /// Creates a copy of the bit field with the new value.
             ///
             /// Returns `None` if `value` is bigger than the specified amount of
-            /// bits for the field can store.
+            /// bits the field can store.
             #[allow(unused)]
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -3204,7 +3174,7 @@ mod tests {
                 /// Creates a copy of the bit field with the new value.
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
-                /// bits for the field can store.
+                /// bits the field can store.
                 #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -3227,7 +3197,7 @@ mod tests {
                 /// Creates a copy of the bit field with the new value.
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
-                /// bits for the field can store.
+                /// bits the field can store.
                 #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -3251,7 +3221,7 @@ mod tests {
                 /// Creates a copy of the bit field with the new value.
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
-                /// bits for the field can store.
+                /// bits the field can store.
                 #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -3274,7 +3244,7 @@ mod tests {
                 /// Creates a copy of the bit field with the new value.
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
-                /// bits for the field can store.
+                /// bits the field can store.
                 #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -4219,7 +4189,7 @@ mod tests {
                 /// Creates a copy of the bit field with the new value.
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
-                /// bits for the field can store.
+                /// bits the field can store.
                 #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -4309,7 +4279,7 @@ mod tests {
                 /// Creates a copy of the bit field with the new value.
                 ///
                 /// Returns `None` if `value` is bigger than the specified amount of
-                /// bits for the field can store.
+                /// bits the field can store.
                 #[allow(unused)]
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
@@ -4414,12 +4384,16 @@ mod tests {
                 if ::core::mem::size_of::<B>() * 8 >= 9 { 0 } else { panic!("Type is smaller than the specified size of 9 bits") }
             ] = [];
 
-            const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [();
-                if !B::is_signed() || ::core::mem::size_of::<B>() * 8 == 9 { 0 } else { panic!("Signed type can never be negative") }
+            const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_9_BITS: [();
+                if B::size() <= 9 { 0 } else { panic!("Size of the field type exceeds the specified field size of 9 bits") }
             ] = [];
         };
         assert_compare!(generate_assertions,
             "16", "struct A(#[field(0, 9)] B);",
+            quote::quote!(impl A { #check_1 })
+        );
+        assert_compare!(generate_assertions,
+            "16", "struct A(#[field(0, 9, signed)] B);",
             quote::quote!(impl A { #check_1 })
         );
         assert_compare!(generate_assertions,
@@ -4436,6 +4410,34 @@ mod tests {
             generate_assertions,
             "NonZero16, allow_overlaps", "struct A(#[field(0, 9)] B);",
             quote::quote!(impl A { #check_1 #non_zero_check })
+        );
+
+        assert_compare!(
+            generate_assertions, "16", "struct A(#[field(4, 8)] B);", quote::quote! {
+                impl A {
+                    const _TYPE_IN_FIELD_0_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_8_BITS: [();
+                        if ::core::mem::size_of::<B>() * 8 >= 8 { 0 } else { panic!("Type is smaller than the specified size of 8 bits") }
+                    ] = [];
+
+                    const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_8_BITS: [();
+                        if B::size() <= 8 { 0 } else { panic!("Size of the field type exceeds the specified field size of 8 bits") }
+                    ] = [];
+                }
+            }
+        );
+
+        assert_compare!(
+            generate_assertions, "16", "struct A(#[field(4, 1)] B);", quote::quote! {
+                impl A {
+                    const _TYPE_IN_FIELD_0_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_1_BIT: [();
+                        if ::core::mem::size_of::<B>() * 8 >= 1 { 0 } else { panic!("Type is smaller than the specified size of 1 bit") }
+                    ] = [];
+
+                    const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_1_BIT: [();
+                        if B::size() <= 1 { 0 } else { panic!("Size of the field type exceeds the specified field size of 1 bit") }
+                    ] = [];
+                }
+            }
         );
 
         let check_2 = quote::quote! {
@@ -4478,8 +4480,8 @@ mod tests {
                 if ::core::mem::size_of::<B>() * 8 >= 2 { 0 } else { panic!("Type is smaller than the specified size of 2 bits") }
             ] = [];
 
-            const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [();
-                if !B::is_signed() || ::core::mem::size_of::<B>() * 8 == 2 { 0 } else { panic!("Signed type can never be negative") }
+            const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_2_BITS: [();
+                if B::size() <= 2 { 0 } else { panic!("Size of the field type exceeds the specified field size of 2 bits") }
             ] = [];
 
             const _FLAGS_IN_FIELD_1_MUST_BE_REPR_U8: [();
@@ -4524,8 +4526,8 @@ mod tests {
                 if ::core::mem::size_of::<B>() * 8 >= 2 { 0 } else { panic!("Type is smaller than the specified size of 2 bits") }
             ] = [];
 
-            const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [();
-                if !B::is_signed() || ::core::mem::size_of::<B>() * 8 == 2 { 0 } else { panic!("Signed type can never be negative") }
+            const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_2_BITS: [();
+                if B::size() <= 2 { 0 } else { panic!("Size of the field type exceeds the specified field size of 2 bits") }
             ] = [];
 
             const _FLAGS_IN_FIELD_1_MUST_BE_REPR_U8: [();
@@ -4715,8 +4717,8 @@ mod tests {
                         if ::core::mem::size_of::<B>() * 8 >= 3 { 0 } else { panic!("Type is smaller than the specified size of 3 bits") }
                     ] = [];
 
-                    const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [();
-                        if !B::is_signed() || ::core::mem::size_of::<B>() * 8 == 3 { 0 } else { panic!("Signed type can never be negative") }
+                    const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_3_BITS: [();
+                        if B::size() <= 3 { 0 } else { panic!("Size of the field type exceeds the specified field size of 3 bits") }
                     ] = [];
 
                     const _FIELD_0_EXCEEDS_THE_BITFIELD_SIZE: [();
@@ -4736,8 +4738,8 @@ mod tests {
                         if ::core::mem::size_of::<B>() * 8 >= 3 { 0 } else { panic!("Type is smaller than the specified size of 3 bits") }
                     ] = [];
 
-                    const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [();
-                        if !B::is_signed() || ::core::mem::size_of::<B>() * 8 == 3 { 0 } else { panic!("Signed type can never be negative") }
+                    const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_3_BITS: [();
+                        if B::size () <= 3 { 0 } else { panic!("Size of the field type exceeds the specified field size of 3 bits") }
                     ] = [];
 
                     const _FIELD_0_EXCEEDS_THE_BITFIELD_SIZE: [();
@@ -4760,8 +4762,8 @@ mod tests {
                         if ::core::mem::size_of::<B>() * 8 >= 5 { 0 } else { panic!("Type is smaller than the specified size of 5 bits") }
                     ] = [];
 
-                    const _SIGNED_TYPE_IN_FIELD_0_CAN_NEVER_BE_NEGATIVE: [();
-                        if !B::is_signed() || ::core::mem::size_of::<B>() * 8 == 5 { 0 } else { panic!("Signed type can never be negative") }
+                    const _TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_5_BITS: [();
+                        if B::size () <= 5 { 0 } else { panic!("Size of the field type exceeds the specified field size of 5 bits") }
                     ] = [];
 
                     const _COMPLETE_FIELD_0_MUST_NOT_HAVE_GAPS: [();
@@ -5738,8 +5740,8 @@ mod tests {
                         if ::core::mem::size_of::<C>() * 8 >= 3 { 0 } else { panic!("Type is smaller than the specified size of 3 bits") }
                     ] = [];
 
-                    const _SIGNED_TYPE_IN_FIELD_1_CAN_NEVER_BE_NEGATIVE: [();
-                        if !C::is_signed() || ::core::mem::size_of::<C>() * 8 == 3 { 0 } else { panic!("Signed type can never be negative") }
+                    const _TYPE_IN_FIELD_1_EXCEEDS_FIELD_SIZE_OF_3_BITS: [();
+                        if C::size() <= 3 { 0 } else { panic!("Size of the field type exceeds the specified field size of 3 bits") }
                     ] = [];
 
                     const _FLAGS_IN_FIELD_2_MUST_BE_REPR_U8: [();
@@ -6144,8 +6146,8 @@ mod tests {
                         if ::core::mem::size_of::<C>() * 8 >= 3 { 0 } else { panic!("Type is smaller than the specified size of 3 bits") }
                     ] = [];
 
-                    const _SIGNED_TYPE_IN_FIELD_1_CAN_NEVER_BE_NEGATIVE: [();
-                        if !C::is_signed() || ::core::mem::size_of::<C>() * 8 == 3 { 0 } else { panic!("Signed type can never be negative") }
+                    const _TYPE_IN_FIELD_1_EXCEEDS_FIELD_SIZE_OF_3_BITS: [();
+                        if C::size() <= 3 { 0 } else { panic!("Size of the field type exceeds the specified field size of 3 bits") }
                     ] = [];
 
                     const _FLAGS_IN_FIELD_2_MUST_BE_REPR_U8: [();
