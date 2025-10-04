@@ -6,35 +6,37 @@ error[E0080]: evaluation of constant value failed
   |
   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-error[E0271]: type mismatch resolving `<Field as TryFrom<u16>>::Error == u16`
- --> tests/ui/bitfield/field_too_small.rs:6:32
-  |
-6 | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
-  |                                ^^^^^ expected `u16`, found `Infallible`
-
-error[E0277]: the trait bound `Field: TryFrom<u16>` is not satisfied
- --> tests/ui/bitfield/field_too_small.rs:6:28
-  |
-6 | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
-  |                            ^^^^-----
-  |                            |   |
-  |                            |   required by a bound introduced by this call
-  |                            the trait `From<u16>` is not implemented for `Field`
-  |
-  = help: the trait `TryFrom<u16>` is not implemented for `Field`
-          but trait `TryFrom<u8>` is implemented for it
-  = help: for that trait implementation, expected `u8`, found `u16`
-  = note: required for `u16` to implement `Into<Field>`
-  = note: required for `Field` to implement `TryFrom<u16>`
-
-error[E0277]: the trait bound `Field: From<u16>` is not satisfied
- --> tests/ui/bitfield/field_too_small.rs:6:32
-  |
-6 | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
-  |                                ^^^^^ the trait `From<u16>` is not implemented for `Field`
-  |
-  = help: the trait `TryFrom<u16>` is not implemented for `Field`
-          but trait `TryFrom<u8>` is implemented for it
-  = help: for that trait implementation, expected `u8`, found `u16`
-  = note: required for `u16` to implement `Into<Field>`
-  = note: required for `Field` to implement `TryFrom<u16>`
+error[E0599]: the variant or associated item `_bitfield_extract_primitive` exists for enum `Field`, but its trait bounds were not satisfied
+  --> tests/ui/bitfield/field_too_small.rs:6:32
+   |
+6  | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
+   |                                ^^^^^ variant or associated item cannot be called on `Field` due to unsatisfied trait bounds
+...
+10 | enum Field {
+   | ---------- doesn't satisfy 6 bounds
+   |
+note: the following trait bounds were not satisfied:
+      `&Field: TryFrom<i16>`
+      `&Field: TryFrom<u16>`
+      `&mut Field: TryFrom<i16>`
+      `&mut Field: TryFrom<u16>`
+      `<&Field as TryFrom<i16>>::Error = i16`
+      `<&Field as TryFrom<u16>>::Error = u16`
+      `<&mut Field as TryFrom<i16>>::Error = i16`
+      `<&mut Field as TryFrom<u16>>::Error = u16`
+      `<Field as TryFrom<i16>>::Error = i16`
+      `<Field as TryFrom<u16>>::Error = u16`
+      `Field: TryFrom<i16>`
+      `Field: TryFrom<u16>`
+  --> tests/ui/bitfield/field_too_small.rs:6:28
+   |
+6  | struct BitField(#[field(0, 9)] Field); // `Field` is only 8 bits wide, and can not store 9 bits.
+   |                            ^^^^^^^^^
+   |                            |
+   |                            unsatisfied trait bound introduced here
+note: the trait `TryFrom` must be implemented
+  --> /builddir/build/BUILD/rustc-1.86.0-src/library/core/src/convert/mod.rs:681:1
+   = help: items from traits can only be used if the trait is implemented and in scope
+   = note: the following traits define an item `_bitfield_extract_primitive`, perhaps you need to implement one of them:
+           candidate #1: `BitFieldExtractionSigned`
+           candidate #2: `BitFieldExtractionUnsigned`

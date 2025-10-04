@@ -138,14 +138,6 @@ impl super::BitField {
             let bit = field.bit.as_ref().unwrap().base10_parse::<u8>().unwrap();
             let size = field.size.as_ref().unwrap().base10_parse::<u8>().unwrap();
 
-            // Conversion for signed fields.
-            let conversion = (
-                field.signed.is_some() ||
-                ty.get_ident().map(|i| crate::primitive::is_signed_primitive(i)).unwrap_or_default()
-            ).then(|| {
-                let unsigned_primitive_type = crate::primitive::type_from_bits(size, false, field.size.span());
-                quote::quote!(as #unsigned_primitive_type)
-            });
 
             // Special handling for primitive types.
             if let Some(ty) = ty.get_ident() {
@@ -178,6 +170,8 @@ impl super::BitField {
                         }
                     };
                 } else if crate::primitive::is_signed_primitive(ty) {
+                    let primitive_type_unsigned = crate::primitive::type_from_bits(size, false, field.size.span());
+
                     return quote::quote_spanned! { span =>
                         #(#attrs)*
                         /// Gets the value of the field.
@@ -193,7 +187,7 @@ impl super::BitField {
                         #[inline(always)]
                         #[must_use = "leaves `self` unmodified and returns a modified variant"]
                         #vis const fn #setter(&self, value: #ty) -> #constructor_type {
-                            self._set_field(#bit, #size, value #conversion as _)
+                            self._set_field(#bit, #size, value as #primitive_type_unsigned as _)
                         }
                     };
                 } else if crate::primitive::is_unsigned_primitive(ty) {
@@ -257,18 +251,39 @@ impl super::BitField {
             // Handling for non-primitive types.
 
             // Generate the minimal primitive type the field needs.
-            let primitive_type = crate::primitive::type_from_bits(size, field.signed.is_some(), field.size.span());
+            let primitive_type_signed = crate::primitive::type_from_bits(size, true, field.size.span());
+            let primitive_type_unsigned = crate::primitive::type_from_bits(size, false, field.size.span());
 
             let body_span = ty.span();
 
+            // This is a workaround to automatically call the correct `TryFrom<iX / uX> for Enum` implementation.
+            let body = quote::quote_spanned! { body_span =>
+                #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: #primitive_type_signed) -> ::core::result::Result<Self, #primitive_type_signed>; }
+                #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: #primitive_type_unsigned) -> ::core::result::Result<Self, #primitive_type_unsigned>; }
+
+                impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<#primitive_type_signed, Error = #primitive_type_signed> {
+                    fn _bitfield_extract_primitive(value: #primitive_type_signed) -> ::core::result::Result<Self, #primitive_type_signed> {
+                        <T as ::core::convert::TryFrom<#primitive_type_signed>>::try_from(value)
+                    }
+                }
+
+                impl<T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<#primitive_type_unsigned, Error = #primitive_type_unsigned> {
+                    fn _bitfield_extract_primitive(value: #primitive_type_unsigned) -> ::core::result::Result<Self, #primitive_type_unsigned> {
+                        <T as ::core::convert::TryFrom<#primitive_type_unsigned>>::try_from(value)
+                    }
+                }
+
+                #ty::_bitfield_extract_primitive(self._field(#bit, #size) as _)
+            };
+
             let (body, getter_type, doc) = match field.complete.is_some() {
                 false => (
-                    quote::quote_spanned!(body_span => ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive_type)),
-                    quote::quote_spanned!(body_span => ::core::result::Result<#ty, #primitive_type>),
+                    quote::quote_spanned!(body_span => #body.map_err(|e| e as #primitive_type_unsigned)),
+                    quote::quote_spanned!(body_span => ::core::result::Result<#ty, #primitive_type_unsigned>),
                     quote::quote_spanned!(body_span => #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."])
                 ),
                 true => (
-                    quote::quote_spanned!(body_span => unsafe { ::core::convert::TryFrom::try_from(self._field(#bit, #size) as #primitive_type).unwrap_unchecked() }),
+                    quote::quote_spanned!(body_span => unsafe { #body.unwrap_unchecked() }),
                     quote::quote_spanned!(body_span => #ty),
                     quote::quote!()
                 )
@@ -289,7 +304,7 @@ impl super::BitField {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 #vis const fn #setter(&self, value: #ty) -> #constructor_type {
-                    self._set_field(#bit, #size, value #conversion as _)
+                    self._set_field(#bit, #size, value as #primitive_type_unsigned as _)
                 }
             }
         } else {
@@ -1550,7 +1565,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    A::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 #[some_attribute1]
@@ -1560,7 +1589,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         );
@@ -1573,7 +1602,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    A::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 #[some_attribute1]
@@ -1583,7 +1626,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> ::core::option::Option<Self> {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         );
@@ -1671,7 +1714,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 pub fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    A::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -1679,7 +1736,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 pub const fn test_set(&self, value: A) -> Self {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         );
@@ -1830,7 +1887,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    B::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -1838,7 +1909,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: B) -> Self {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         );
@@ -1849,7 +1920,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    B::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -1857,7 +1942,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: B) -> ::core::option::Option<Self> {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         );
@@ -2008,7 +2093,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    A::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2016,7 +2115,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         );
@@ -2027,7 +2126,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    A::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2035,7 +2148,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> ::core::option::Option<Self> {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         );
@@ -2047,7 +2160,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<A, u16> {
-                    ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i16) -> ::core::result::Result<Self, i16>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u16) -> ::core::result::Result<Self, u16>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i16, Error = i16> {
+                        fn _bitfield_extract_primitive(value: i16) -> ::core::result::Result<Self, i16> {
+                            <T as ::core::convert::TryFrom<i16>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u16, Error = u16> {
+                        fn _bitfield_extract_primitive(value: u16) -> ::core::result::Result<Self, u16> {
+                            <T as ::core::convert::TryFrom<u16>>::try_from(value)
+                        }
+                    }
+
+                    A::_bitfield_extract_primitive(self._field(1u8, 9u8) as _).map_err(|e| e as u16)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2055,7 +2182,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> Self {
-                    self._set_field(1u8, 9u8, value as _)
+                    self._set_field(1u8, 9u8, value as u16 as _)
                 }
             }
         );
@@ -2066,7 +2193,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<A, u16> {
-                    ::core::convert::TryFrom::try_from(self._field(1u8, 9u8) as u16)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i16) -> ::core::result::Result<Self, i16>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u16) -> ::core::result::Result<Self, u16>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i16, Error = i16> {
+                        fn _bitfield_extract_primitive(value: i16) -> ::core::result::Result<Self, i16> {
+                            <T as ::core::convert::TryFrom<i16>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u16, Error = u16> {
+                        fn _bitfield_extract_primitive(value: u16) -> ::core::result::Result<Self, u16> {
+                            <T as ::core::convert::TryFrom<u16>>::try_from(value)
+                        }
+                    }
+
+                    A::_bitfield_extract_primitive(self._field(1u8, 9u8) as _).map_err(|e| e as u16)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2074,7 +2215,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn test_set(&self, value: A) -> ::core::option::Option<Self> {
-                    self._set_field(1u8, 9u8, value as _)
+                    self._set_field(1u8, 9u8, value as u16 as _)
                 }
             }
         );
@@ -2214,69 +2355,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
-                }
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
 
-                /// Creates a copy of the bit field with the new value.
-                #[allow(unused)]
-                #[inline(always)]
-                #[must_use = "leaves `self` unmodified and returns a modified variant"]
-                const fn test_set(&self, value: A) -> Self {
-                    self._set_field(0u8, 8u8, value as _)
-                }
-            }
-        );
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
 
-        assert_accessor!(
-            "32", "struct A(#[field(0, 8, complete)] A);", true, quote::quote! {
-                /// Gets the value of the field.
-                #[allow(unused)]
-                #[inline(always)]
-                fn test_get(&self) -> A {
-                    unsafe { ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8).unwrap_unchecked() }
-                }
-
-                /// Creates a copy of the bit field with the new value.
-                #[allow(unused)]
-                #[inline(always)]
-                #[must_use = "leaves `self` unmodified and returns a modified variant"]
-                const fn test_set(&self, value: A) -> Self {
-                    self._set_field(0u8, 8u8, value as _)
-                }
-            }
-        );
-    }
-
-    #[test]
-    fn accessor_signed() {
-        assert_accessor!(
-            "32", "struct A(#[field(0, 8)] A);", true, quote::quote! {
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                fn test_get(&self) -> ::core::result::Result<A, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as u8)
-                }
-
-                /// Creates a copy of the bit field with the new value.
-                #[allow(unused)]
-                #[inline(always)]
-                #[must_use = "leaves `self` unmodified and returns a modified variant"]
-                const fn test_set(&self, value: A) -> Self {
-                    self._set_field(0u8, 8u8, value as _)
-                }
-            }
-        );
-
-        assert_accessor!(
-            "32", "struct A(#[field(0, 8, signed)] A);", true, quote::quote! {
-                /// Gets the value of the field.
-                #[doc = "Returns the primitive value encapsulated in the `Err` variant, if the value can not be converted to the expected type."]
-                #[allow(unused)]
-                #[inline(always)]
-                fn test_get(&self) -> ::core::result::Result<A, i8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 8u8) as i8)
+                    A::_bitfield_extract_primitive(self._field(0u8, 8u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2289,6 +2382,44 @@ mod tests {
             }
         );
 
+        assert_accessor!(
+            "32", "struct A(#[field(0, 8, complete)] A);", true, quote::quote! {
+                /// Gets the value of the field.
+                #[allow(unused)]
+                #[inline(always)]
+                fn test_get(&self) -> A {
+                    unsafe {
+                        #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                        #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                        impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                            fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                                <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                            }
+                        }
+                        impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                            fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                                <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                            }
+                        }
+
+                        A::_bitfield_extract_primitive(self._field(0u8, 8u8) as _).unwrap_unchecked()
+                    }
+                }
+
+                /// Creates a copy of the bit field with the new value.
+                #[allow(unused)]
+                #[inline(always)]
+                #[must_use = "leaves `self` unmodified and returns a modified variant"]
+                const fn test_set(&self, value: A) -> Self {
+                    self._set_field(0u8, 8u8, value as u8 as _)
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn accessor_signed() {
         assert_accessor!(
             "32", "struct A(u8);", true, quote::quote! {
                 /// Gets the value of the field.
@@ -2764,7 +2895,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    B::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2772,7 +2917,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: B) -> Self {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         });
@@ -2783,7 +2928,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn get(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    B::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2791,7 +2950,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: B) -> ::core::option::Option<Self> {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         });
@@ -2946,7 +3105,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn b(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    B::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2954,7 +3127,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: B) -> Self {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         });
@@ -2965,7 +3138,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn b(&self) -> ::core::result::Result<B, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    B::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -2973,7 +3160,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: B) -> ::core::option::Option<Self> {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         });
@@ -3056,7 +3243,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn c(&self) -> ::core::result::Result<C, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    C::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -3064,7 +3265,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_c(&self, value: C) -> Self {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         });
@@ -3149,7 +3350,21 @@ mod tests {
                 #[allow(unused)]
                 #[inline(always)]
                 fn c(&self) -> ::core::result::Result<C, u8> {
-                    ::core::convert::TryFrom::try_from(self._field(0u8, 1u8) as u8)
+                    #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                    #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                    impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                        fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                            <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                        }
+                    }
+                    impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                        fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                            <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                        }
+                    }
+
+                    C::_bitfield_extract_primitive(self._field(0u8, 1u8) as _).map_err(|e| e as u8)
                 }
 
                 /// Creates a copy of the bit field with the new value.
@@ -3157,7 +3372,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_c(&self, value: C) -> ::core::option::Option<Self> {
-                    self._set_field(0u8, 1u8, value as _)
+                    self._set_field(0u8, 1u8, value as u8 as _)
                 }
             }
         });
@@ -4393,10 +4608,6 @@ mod tests {
             quote::quote!(impl A { #check_1 })
         );
         assert_compare!(generate_assertions,
-            "16", "struct A(#[field(0, 9, signed)] B);",
-            quote::quote!(impl A { #check_1 })
-        );
-        assert_compare!(generate_assertions,
             "NonZero16", "struct A(#[field(0, 9)] B);",
             quote::quote!(impl A { #check_1 #non_zero_check })
         );
@@ -5570,7 +5781,21 @@ mod tests {
                     #[allow(unused)]
                     #[inline(always)]
                     pub fn r#c(&self) -> ::core::result::Result<C, u8> {
-                        ::core::convert::TryFrom::try_from(self._field(7u8, 3u8) as u8)
+                        #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                        #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                        impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                            fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                                <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                            }
+                        }
+                        impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                            fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                                <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                            }
+                        }
+
+                        C::_bitfield_extract_primitive(self._field(7u8, 3u8) as _).map_err(|e| e as u8)
                     }
 
                     #[doc = " D3 "]
@@ -5579,7 +5804,7 @@ mod tests {
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub const fn set_c(&self, value: C) -> Self {
-                        self._set_field(7u8, 3u8, value as _)
+                        self._set_field(7u8, 3u8, value as u8 as _)
                     }
 
                     #[doc = " D4 "]
@@ -6037,7 +6262,21 @@ mod tests {
                     #[allow(unused)]
                     #[inline(always)]
                     pub fn c(&self) -> ::core::result::Result<C, u8> {
-                        ::core::convert::TryFrom::try_from(self._field(7u8, 3u8) as u8)
+                        #[allow(unused)] trait BitFieldExtractionSigned: Sized { fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8>; }
+                        #[allow(unused)] trait BitFieldExtractionUnsigned: Sized { fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8>; }
+
+                        impl<T> BitFieldExtractionSigned for T where T: ::core::convert::TryFrom<i8, Error = i8> {
+                            fn _bitfield_extract_primitive(value: i8) -> ::core::result::Result<Self, i8> {
+                                <T as ::core::convert::TryFrom<i8>>::try_from(value)
+                            }
+                        }
+                        impl <T> BitFieldExtractionUnsigned for T where T: ::core::convert::TryFrom<u8, Error = u8> {
+                            fn _bitfield_extract_primitive(value: u8) -> ::core::result::Result<Self, u8> {
+                                <T as ::core::convert::TryFrom<u8>>::try_from(value)
+                            }
+                        }
+
+                        C::_bitfield_extract_primitive(self._field(7u8, 3u8) as _).map_err(|e| e as u8)
                     }
 
                     #[doc = " D3 "]
@@ -6046,7 +6285,7 @@ mod tests {
                     #[inline(always)]
                     #[must_use = "leaves `self` unmodified and returns a modified variant"]
                     pub const fn set_c(&self, value: C) -> ::core::option::Option<Self> {
-                        self._set_field(7u8, 3u8, value as _)
+                        self._set_field(7u8, 3u8, value as u8 as _)
                     }
 
                     #[doc = " D4 "]

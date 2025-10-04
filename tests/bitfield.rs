@@ -572,7 +572,7 @@ mod tests {
     fn debug_tuple_field_signed_enum() {
         #[bitfield::bitfield(16)]
         #[derive(Debug)]
-        struct BitField(#[field(3, 8, signed)] FieldSigned);
+        struct BitField(#[field(3, 8)] FieldSigned);
 
         // Default value which maps to `0`, which is non-existent in `FieldSigned`.
         let mut field = BitField::new();
@@ -1301,7 +1301,7 @@ mod tests {
     fn variant_exceeds_field() {
         // A positive test for the assertion.
         #[bitfield::bitfield(32)]
-        struct BitField(#[field(size = 16, signed)] Field);
+        struct BitField(#[field(size = 16)] Field);
 
         #[derive(Clone, Copy, Debug, bitfield::Field)]
         #[repr(i16)]

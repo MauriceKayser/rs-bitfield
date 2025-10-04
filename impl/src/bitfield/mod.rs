@@ -80,6 +80,5 @@ pub struct FieldDetails {
     pub bit: Option<syn::LitInt>,
     /// This must never be `None` after parsing.
     pub size: Option<syn::LitInt>,
-    pub complete: Option<syn::Ident>,
-    pub signed: Option<syn::Ident>
+    pub complete: Option<syn::Ident>
 }

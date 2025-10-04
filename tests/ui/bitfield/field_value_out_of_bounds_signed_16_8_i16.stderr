@@ -1,15 +1,15 @@
 error[E0080]: evaluation of constant value failed
- --> tests/ui/bitfield/field_value_out_of_bounds_unsigned_8_1_u16.rs:6:36
+ --> tests/ui/bitfield/field_value_out_of_bounds_signed_16_8_i16.rs:6:36
   |
-6 | struct BitField(#[field(size = 1)] Field); // Can only store values between `0..=1`.
-  |                                    ^^^^^ the evaluated program panicked at 'Size of the field type exceeds the specified field size of 1 bit', $DIR/tests/ui/bitfield/field_value_out_of_bounds_unsigned_8_1_u16.rs:6:36
+6 | struct BitField(#[field(size = 8)] Field);
+  |                                    ^^^^^ the evaluated program panicked at 'Size of the field type exceeds the specified field size of 8 bits', $DIR/tests/ui/bitfield/field_value_out_of_bounds_signed_16_8_i16.rs:6:36
   |
   = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0599]: the variant or associated item `_bitfield_extract_primitive` exists for enum `Field`, but its trait bounds were not satisfied
-  --> tests/ui/bitfield/field_value_out_of_bounds_unsigned_8_1_u16.rs:6:36
+  --> tests/ui/bitfield/field_value_out_of_bounds_signed_16_8_i16.rs:6:36
    |
-6  | struct BitField(#[field(size = 1)] Field); // Can only store values between `0..=1`.
+6  | struct BitField(#[field(size = 8)] Field);
    |                                    ^^^^^ variant or associated item cannot be called on `Field` due to unsatisfied trait bounds
 ...
 10 | enum Field {
@@ -28,9 +28,9 @@ note: the following trait bounds were not satisfied:
       `<Field as TryFrom<u8>>::Error = u8`
       `Field: TryFrom<i8>`
       `Field: TryFrom<u8>`
-  --> tests/ui/bitfield/field_value_out_of_bounds_unsigned_8_1_u16.rs:6:32
+  --> tests/ui/bitfield/field_value_out_of_bounds_signed_16_8_i16.rs:6:32
    |
-6  | struct BitField(#[field(size = 1)] Field); // Can only store values between `0..=1`.
+6  | struct BitField(#[field(size = 8)] Field);
    |                                ^^^^^^^^^
    |                                |
    |                                unsatisfied trait bound introduced here

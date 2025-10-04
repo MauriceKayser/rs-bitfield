@@ -212,8 +212,7 @@ impl super::BitField {
                         size: Some(syn::LitInt::new(
                             &format!("{}", primitive_size), entry.ty.span()
                         )),
-                        complete: None,
-                        signed: None
+                        complete: None
                     });
                     bit += primitive_size;
                 }
@@ -290,11 +289,6 @@ impl super::BitField {
                                     "type is smaller than the specified size of {} bits", size
                                 )));
                             }
-                            if let Some(signed) = &field.signed {
-                                return Err(syn::Error::new(
-                                    signed.span(), "unnecessary attribute for `bool`"
-                                ));
-                            }
                         } else if
                             crate::primitive::is_signed_primitive(ty) ||
                             crate::primitive::is_unsigned_primitive(ty)
@@ -331,12 +325,6 @@ impl super::BitField {
                                         "field only uses {} bits, use `u{}` instead", size, *s
                                     )));
                                 }
-                            }
-
-                            if let Some(signed) = &field.signed {
-                                return Err(syn::Error::new(signed.span(), format!(
-                                    "unnecessary attribute for `{}`", ty
-                                )));
                             }
                         }
                     }
@@ -474,9 +462,8 @@ impl syn::parse::Parse for super::EntryNamed {
 
 impl syn::parse::Parse for super::FieldDetails {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        fn parse_extra(buffer: &syn::parse::ParseBuffer) -> syn::Result<(Option<syn::Ident>, Option<syn::Ident>)> {
+        fn parse_extra(buffer: &syn::parse::ParseBuffer) -> syn::Result<Option<syn::Ident>> {
             let mut complete = None;
-            let mut signed = None;
 
             loop {
                 if buffer.peek(syn::Token![,]) && buffer.peek2(syn::Ident) {
@@ -489,21 +476,15 @@ impl syn::parse::Parse for super::FieldDetails {
                         } else {
                             return Err(syn::Error::new(ident.span(), "duplicate"));
                         }
-                    } else if ident == "signed" {
-                        if signed.is_none() {
-                            signed = Some(ident);
-                        } else {
-                            return Err(syn::Error::new(ident.span(), "duplicate"));
-                        }
                     } else {
-                        return Err(syn::Error::new(ident.span(), "did you mean `complete`, or `signed`?"));
+                        return Err(syn::Error::new(ident.span(), "did you mean `complete`?"));
                     }
                 } else {
                     break;
                 }
             }
 
-            Ok((complete, signed))
+            Ok(complete)
         }
 
         fn validate_bit(bit: &syn::LitInt) -> syn::Result<()> {
@@ -525,11 +506,11 @@ impl syn::parse::Parse for super::FieldDetails {
         let span = input.span();
         let buffer; syn::parenthesized!(buffer in input);
 
-        // Parse `bit = LitInt, signed?` or `size = LitInt, signed?`.
+        // Parse `bit = LitInt, complete?` or `size = LitInt, complete?`.
         if let Ok(ident) = buffer.parse::<syn::Ident>() {
             buffer.parse::<syn::Token![=]>()?;
             let value: syn::LitInt = buffer.parse()?;
-            let (complete, signed) = parse_extra(&buffer)?;
+            let complete = parse_extra(&buffer)?;
 
             if !buffer.is_empty() {
                 return Err(buffer.error("unexpected token"));
@@ -537,10 +518,10 @@ impl syn::parse::Parse for super::FieldDetails {
 
             return if ident == "bit" {
                 validate_bit(&value)?;
-                Ok(Self { span: value.span(), bit: Some(value), size: None, complete, signed })
+                Ok(Self { span: value.span(), bit: Some(value), size: None, complete })
             } else if ident == "size" {
                 validate_size(&value)?;
-                Ok(Self { span: value.span(), bit: None, size: Some(value), complete, signed })
+                Ok(Self { span: value.span(), bit: None, size: Some(value), complete })
             } else {
                 Err(syn::Error::new(ident.span(), "expected `bit` or `size`"))
             };
@@ -555,13 +536,13 @@ impl syn::parse::Parse for super::FieldDetails {
         let size: syn::LitInt = buffer.parse()?;
         validate_size(&size)?;
 
-        let (complete, signed) = parse_extra(&buffer)?;
+        let complete = parse_extra(&buffer)?;
 
         if !buffer.is_empty() {
             return Err(buffer.error("unexpected token"));
         }
 
-        Ok(Self { span, bit: Some(bit), size: Some(size), complete, signed })
+        Ok(Self { span, bit: Some(bit), size: Some(size), complete })
     }
 }
 
@@ -1232,37 +1213,6 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn field_details_signed() {
-        assert!(match parse_valid!("8", "struct A(#[field(size = 2)] A);").data {
-            Data::Tuple(entry) => {
-                entry.field.unwrap().signed.is_none()
-            },
-            _ => false
-        });
-
-        assert!(match parse_valid!("8", "struct A(#[field(size = 2, signed)] A);").data {
-            Data::Tuple(entry) => {
-                entry.field.unwrap().signed.is_some()
-            },
-            _ => false
-        });
-
-        assert!(match parse_valid!("8", "struct A(#[field(1, 2)] A);").data {
-            Data::Tuple(entry) => {
-                entry.field.unwrap().signed.is_none()
-            },
-            _ => false
-        });
-
-        assert!(match parse_valid!("8", "struct A(#[field(1, 2, signed)] A);").data {
-            Data::Tuple(entry) => {
-                entry.field.unwrap().signed.is_some()
-            },
-            _ => false
-        });
-    }
-
-    #[test]
     fn field_details_extra_tokens() {
         parse_invalid!(
             "8", "struct A(#[field(1, 2, 3)] B);",
@@ -1277,21 +1227,15 @@ pub(super) mod tests {
         );
 
         parse_invalid!(
-            "8", "struct A(#[field(bit = 1, complete, signed, X)] B);",
-            "did you mean `complete`, or `signed`?",
-            (1, 44), (1, 45)
+            "8", "struct A(#[field(bit = 1, complete, X)] B);",
+            "did you mean `complete`?",
+            (1, 36), (1, 37)
         );
 
         parse_invalid!(
             "8", "struct A(#[field(bit = 1, complete, complete)] B);",
             "duplicate",
             (1, 36), (1, 44)
-        );
-
-        parse_invalid!(
-            "8", "struct A(#[field(bit = 1, signed, signed)] B);",
-            "duplicate",
-            (1, 34), (1, 40)
         );
 
         parse_invalid!(

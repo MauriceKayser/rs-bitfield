@@ -810,9 +810,9 @@
 /// assert_eq!(field.get(), 8);
 /// ```
 ///
-/// #### 2.2.2.4 Unsigned enumerations
+/// #### 2.2.2.4 Enumerations
 ///
-/// For fields of enumerations with an unsigned primitive integer representation, the following
+/// For fields of enumeration types with a primitive integer representation, the following
 /// accessor methods are generated:
 ///
 /// ```rust,ignore
@@ -829,66 +829,43 @@
 /// ```
 ///
 /// The getter tries to convert the primitive integer type to an enumeration variant by executing
-/// `core::convert::TryFrom<#UNSIGNED_PRIMITIVE_TYPE>::try_into(BITS_REPRESENTING_THE_FIELD)` where
-/// `#UNSIGNED_PRIMITIVE_TYPE` is the smallest possible primitive integer type that can store the
-/// field value, based on the `size` value in the `#[field]` attribute, f. e. `u8` for
-/// `#[field(size = 1)]` to `#[field(size = 8)]`, or `u16` for `#[field(size = 9)]` to
+/// `core::convert::TryFrom<#PRIMITIVE_TYPE>::try_into(BITS_REPRESENTING_THE_FIELD)` where
+/// `#PRIMITIVE_TYPE` is the smallest possible (un-)signed primitive integer type that can store the
+/// field value, based on the `size` value in the `#[field]` attribute, f. e. `u8` / `i8` for
+/// `#[field(size = 1)]` to `#[field(size = 8)]`, or `u16` / `i16` for `#[field(size = 9)]` to
 /// `#[field(size = 16)]`, etc.
+///
+/// Because the highest bit is used to store the sign, fields of enumeration types with a signed
+/// primitive integer representation are only supported if their full size is used, f. e. `size = 8`
+/// for `i8` or `size = 16` for `i16`, etc.
 ///
 /// Example:
 ///
 /// ```rust
 /// #[bitfield::bitfield(8)]
-/// struct BitField(#[field(size = 3)] Field);
+/// struct BitFieldUnsigned(#[field(size = 2)] FieldUnsigned);
 ///
 /// #[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
 /// #[repr(u8)]
-/// enum Field {
+/// enum FieldUnsigned {
 ///     // 0 is unused.
 ///     One = 1,
 ///     Two,
 ///     Three
 /// }
 ///
-/// let mut field = BitField::new();
+/// let mut field = BitFieldUnsigned::new();
 /// assert_eq!(field.get(), Err(0));
 ///
-/// field = field.set(Field::One);
-/// assert_eq!(field.get(), Ok(Field::One));
-/// ```
+/// field = field.set(FieldUnsigned::One);
+/// assert_eq!(field.get(), Ok(FieldUnsigned::One));
 ///
-/// #### 2.2.2.5 Signed enumerations
-///
-/// Because the highest bit is used to store the sign, fields of enumerations with a signed
-/// primitive integer representation are only supported if their full size is used, f. e. `size = 8`
-/// for `i8` or `size = 16` for `i16`, etc.
-///
-/// They are generally handled like fields of enumerations with an unsigned primitive integer type,
-/// except that the `signed` keyword must be added in the `#[field]` attribute, which will cause the
-/// following accessor methods to be generated:
-///
-/// ```rust,ignore
-/// // NOTE: This method is not `const` until https://github.com/rust-lang/rust-project-goals/issues/106
-/// // is merged, because `core::convert::TryFrom` is used under the hood to convert the primitve
-/// // value to an enumeration variant.
-/// //
-/// /// Returns the primitive value encapsulated in the `Err` variant, if the value can
-/// /// not be converted to the expected type.
-/// (const) fn #GETTER(&self) -> core::result::Result<#FIELD_TYPE, #SIGNED_PRIMITIVE_TYPE>;
-///
-/// /// Creates a copy of the bit field with the new value.
-/// const fn #SETTER(&self, value: #FIELD_TYPE) -> Self;
-/// ```
-///
-/// Example:
-///
-/// ```rust
 /// #[bitfield::bitfield(16)]
-/// struct BitField(#[field(size = 8, signed)] Field);
+/// struct BitFieldSigned(#[field(size = 8)] FieldSigned);
 ///
 /// #[derive(Clone, Copy, Debug, Eq, PartialEq, bitfield::Field)]
 /// #[repr(i8)]
-/// enum Field {
+/// enum FieldSigned {
 ///     MinusOne = -1,
 ///     // 0 is unused.
 ///     One = 1,
@@ -896,17 +873,17 @@
 ///     Three
 /// }
 ///
-/// let mut field = BitField::new();
+/// let mut field = BitFieldSigned::new();
 /// assert_eq!(field.get(), Err(0));
 ///
-/// field = field.set(Field::MinusOne);
-/// assert_eq!(field.get(), Ok(Field::MinusOne));
+/// field = field.set(FieldSigned::MinusOne);
+/// assert_eq!(field.get(), Ok(FieldSigned::MinusOne));
 ///
-/// field = field.set(Field::One);
-/// assert_eq!(field.get(), Ok(Field::One));
+/// field = field.set(FieldSigned::One);
+/// assert_eq!(field.get(), Ok(FieldSigned::One));
 /// ```
 ///
-/// #### 2.2.2.6 Complete enumerations
+/// #### 2.2.2.5 Complete enumerations
 ///
 /// As described previously, the getter of an enumeration value returns a
 /// `core::result::Result<#FIELD_TYPE, #PRIMITIVE_TYPE>` by default. The `Result`

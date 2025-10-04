@@ -1,0 +1,7 @@
+error[E0080]: evaluation of constant value failed
+ --> tests/ui/bitfield/field_value_out_of_bounds_signed_16_9_i16.rs:6:36
+  |
+6 | struct BitField(#[field(size = 9)] Field);
+  |                                    ^^^^^ the evaluated program panicked at 'Size of the field type exceeds the specified field size of 9 bits', $DIR/tests/ui/bitfield/field_value_out_of_bounds_signed_16_9_i16.rs:6:36
+  |
+  = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
