@@ -850,11 +850,25 @@ impl super::BitField {
                     entry.ty.span()
                 );
 
-                // `Flags::max()` must not be >= `bits_of(BitField)`.
+                // `max_variant_discriminant(Flags)` must not be >= `bits_of(BitField)`.
                 let max_assertion = generate_assertion(
                     &syn::Ident::new(&format!("_FLAGS_IN_FIELD_{i}_EXCEED_THE_BITFIELD_SIZE"), entry.ty.span()),
                     "Flags exceed the bitfield size",
-                    quote::quote! { ::core::mem::size_of::<#base_type>() * 8 > #ty::max() as usize },
+                    quote::quote! { ::core::mem::size_of::<#base_type>() * 8 > {
+                        let mut i = 0;
+                        let mut max = #ty::iter()[i];
+
+                        while i < #ty::iter().len() {
+                            let current = #ty::iter()[i];
+                            if current as u8 > max as u8 {
+                                max = current;
+                            }
+
+                            i += 1;
+                        }
+
+                        max
+                    } as usize },
                     entry.ty.span()
                 );
 
@@ -4657,7 +4671,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<u16>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<u16>() * 8 > {
+                    let mut i = 0;
+                    let mut max = B::iter()[i];
+
+                    while i < B::iter().len() {
+                        let current = B::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
         };
         assert_compare!(generate_assertions,
@@ -4674,7 +4702,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<::core::num::NonZeroU16>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<::core::num::NonZeroU16>() * 8 > {
+                    let mut i = 0;
+                    let mut max = B::iter()[i];
+
+                    while i < B::iter().len() {
+                        let current = B::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
         };
         assert_compare!(generate_assertions,
@@ -4700,7 +4742,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_1_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<u8>() * 8 > C::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<u8>() * 8 > {
+                    let mut i = 0;
+                    let mut max = C::iter()[i];
+
+                    while i < C::iter().len() {
+                        let current = C::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
         };
         assert_compare!(
@@ -4746,7 +4802,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_1_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<::core::num::NonZeroU8>() * 8 > C::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<::core::num::NonZeroU8>() * 8 > {
+                    let mut i = 0;
+                    let mut max = C::iter()[i];
+
+                    while i < C::iter().len() {
+                        let current = C::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
         };
         assert_compare!(
@@ -4787,7 +4857,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<u8>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<u8>() * 8 > {
+                    let mut i = 0;
+                    let mut max = B::iter()[i];
+
+                    while i < B::iter().len() {
+                        let current = B::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
 
             const _FLAGS_IN_FIELD_1_MUST_BE_REPR_U8: [();
@@ -4795,7 +4879,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_1_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<u8>() * 8 > C::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<u8>() * 8 > {
+                    let mut i = 0;
+                    let mut max = C::iter()[i];
+
+                    while i < C::iter().len() {
+                        let current = C::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
         };
         assert_compare!(
@@ -4841,7 +4939,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<::core::num::NonZeroU8>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<::core::num::NonZeroU8>() * 8 > {
+                    let mut i = 0;
+                    let mut max = B::iter()[i];
+
+                    while i < B::iter().len() {
+                        let current = B::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
 
             const _FLAGS_IN_FIELD_1_MUST_BE_REPR_U8: [();
@@ -4849,7 +4961,21 @@ mod tests {
             ] = [];
 
             const _FLAGS_IN_FIELD_1_EXCEED_THE_BITFIELD_SIZE: [();
-                if ::core::mem::size_of::<::core::num::NonZeroU8>() * 8 > C::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                if ::core::mem::size_of::<::core::num::NonZeroU8>() * 8 > {
+                    let mut i = 0;
+                    let mut max = C::iter()[i];
+
+                    while i < C::iter().len() {
+                        let current = C::iter()[i];
+                        if current as u8 > max as u8 {
+                            max = current;
+                        }
+
+                        i += 1;
+                    }
+
+                    max
+                } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
             ] = [];
         };
         assert_compare!(
@@ -4901,7 +5027,21 @@ mod tests {
                     ] = [];
 
                     const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                        if ::core::mem::size_of::<usize>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                        if ::core::mem::size_of::<usize>() * 8 > {
+                            let mut i = 0;
+                            let mut max = B::iter()[i];
+
+                            while i < B::iter().len() {
+                                let current = B::iter()[i];
+                                if current as u8 > max as u8 {
+                                    max = current;
+                                }
+
+                                i += 1;
+                            }
+
+                            max
+                        } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
                     ] = [];
                 }
             }
@@ -4914,7 +5054,21 @@ mod tests {
                     ] = [];
 
                     const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                        if ::core::mem::size_of::<::core::num::NonZeroUsize>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                        if ::core::mem::size_of::<::core::num::NonZeroUsize>() * 8 > {
+                            let mut i = 0;
+                            let mut max = B::iter()[i];
+
+                            while i < B::iter().len() {
+                                let current = B::iter()[i];
+                                if current as u8 > max as u8 {
+                                    max = current;
+                                }
+
+                                i += 1;
+                            }
+
+                            max
+                        } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
                     ] = [];
 
                     #non_zero_check
@@ -5958,7 +6112,21 @@ mod tests {
                     ] = [];
 
                     const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                        if ::core::mem::size_of::<u16>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                        if ::core::mem::size_of::<u16>() * 8 > {
+                            let mut i = 0;
+                            let mut max = B::iter()[i];
+
+                            while i < B::iter().len() {
+                                let current = B::iter()[i];
+                                if current as u8 > max as u8 {
+                                    max = current;
+                                }
+
+                                i += 1;
+                            }
+
+                            max
+                        } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
                     ] = [];
 
                     const _TYPE_IN_FIELD_1_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_3_BITS: [();
@@ -5974,7 +6142,21 @@ mod tests {
                     ] = [];
 
                     const _FLAGS_IN_FIELD_2_EXCEED_THE_BITFIELD_SIZE: [();
-                        if ::core::mem::size_of::<u16>() * 8 > D::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                        if ::core::mem::size_of::<u16>() * 8 > {
+                            let mut i = 0;
+                            let mut max = D::iter()[i];
+
+                            while i < D::iter().len() {
+                                let current = D::iter()[i];
+                                if current as u8 > max as u8 {
+                                    max = current;
+                                }
+
+                                i += 1;
+                            }
+
+                            max
+                        } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
                     ] = [];
 
                     const fn _flags_in_field_0_overlap_with_field_1() -> bool {
@@ -6378,7 +6560,21 @@ mod tests {
                     ] = [];
 
                     const _FLAGS_IN_FIELD_0_EXCEED_THE_BITFIELD_SIZE: [();
-                        if ::core::mem::size_of::<::core::num::NonZeroU16>() * 8 > B::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                        if ::core::mem::size_of::<::core::num::NonZeroU16>() * 8 > {
+                            let mut i = 0;
+                            let mut max = B::iter()[i];
+
+                            while i < B::iter().len() {
+                                let current = B::iter()[i];
+                                if current as u8 > max as u8 {
+                                    max = current;
+                                }
+
+                                i += 1;
+                            }
+
+                            max
+                        } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
                     ] = [];
 
                     const _TYPE_IN_FIELD_1_IS_SMALLER_THAN_THE_SPECIFIED_SIZE_OF_3_BITS: [();
@@ -6394,7 +6590,21 @@ mod tests {
                     ] = [];
 
                     const _FLAGS_IN_FIELD_2_EXCEED_THE_BITFIELD_SIZE: [();
-                        if ::core::mem::size_of::<::core::num::NonZeroU16>() * 8 > D::max() as usize { 0 } else { panic!("Flags exceed the bitfield size") }
+                        if ::core::mem::size_of::<::core::num::NonZeroU16>() * 8 > {
+                            let mut i = 0;
+                            let mut max = D::iter()[i];
+
+                            while i < D::iter().len() {
+                                let current = D::iter()[i];
+                                if current as u8 > max as u8 {
+                                    max = current;
+                                }
+
+                                i += 1;
+                            }
+
+                            max
+                        } as usize { 0 } else { panic!("Flags exceed the bitfield size") }
                     ] = [];
 
                     const fn _flags_in_field_0_overlap_with_field_1() -> bool {

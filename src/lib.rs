@@ -1374,9 +1374,6 @@ pub fn field(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 /// ```ignore
 /// /// Returns an array containing all enumeration variants in the defined order.
 /// const fn iter() -> &'static [Self];
-///
-/// /// Returns the flag with the highest bit value.
-/// const fn max() -> Self;
 /// ```
 ///
 /// Example:
@@ -1407,24 +1404,6 @@ pub fn field(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 ///     #[inline(always)]
 ///     const fn iter() -> &'static [Self] {
 ///         &[Self::Flag1, Self::Flag2, Self::Flag5]
-///     }
-///
-///     /// Returns the flag with the highest bit value.
-///     #[inline(always)]
-///     const fn max() -> Self {
-///         let mut i = 0;
-///         let mut max = Self::Flag1;
-///
-///         while i < Self::iter().len() {
-///             let current = Self::iter()[i];
-///             if current as u8 > max as u8 {
-///                 max = current;
-///             }
-///
-///             i += 1;
-///         }
-///
-///         max
 ///     }
 /// }
 /// ```

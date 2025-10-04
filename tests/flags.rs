@@ -17,10 +17,4 @@ mod tests {
     fn iter() {
         assert_eq!(B::iter().len(), 4);
     }
-
-    #[test]
-    fn max() {
-        assert_eq!(B::max(), B::E);
-        assert_eq!(B::max() as u8, 6);
-    }
 }
