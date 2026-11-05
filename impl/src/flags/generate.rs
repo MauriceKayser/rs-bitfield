@@ -17,11 +17,11 @@ impl super::Flags {
 }
 
 /// Generates the user code for the parsed flags of a bit field.
-impl core::convert::Into<proc_macro2::TokenStream> for super::Flags {
-    fn into(self) -> proc_macro2::TokenStream {
-        let ident = &self.0.ident;
+impl core::convert::From<super::Flags> for proc_macro2::TokenStream {
+    fn from(value: super::Flags) -> Self {
+        let ident = &value.0.ident;
 
-        let iter = self.generate_iter();
+        let iter = value.generate_iter();
 
         quote::quote! {
             impl #ident {

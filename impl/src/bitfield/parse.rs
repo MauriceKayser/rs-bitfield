@@ -120,11 +120,11 @@ impl super::BitField {
         let right_bit = right.bit.as_ref().unwrap().base10_parse::<u8>()?;
         let right_size = right.size.as_ref().unwrap().base10_parse::<u8>()?;
 
-        return Ok(
+        Ok(
             left_bit == right_bit ||
             left_bit  < right_bit && left_bit  + left_size  > right_bit ||
             right_bit < left_bit  && right_bit + right_size > left_bit
-        );
+        )
     }
 
     /// Tries to parse the `attribute` and `item` into a `BitField` structure.
@@ -175,9 +175,7 @@ impl super::BitField {
             let mut bit = 0u8;
 
             for entry in bitfield.data.entries_mut() {
-                let primitive_size = entry.ty.get_ident().map(
-                    |ident| crate::primitive::primitive_bits(ident)
-                ).flatten();
+                let primitive_size = entry.ty.get_ident().and_then(crate::primitive::primitive_bits);
 
                 if let Some(field) = &mut entry.field {
                     // Handle optional `size`.
@@ -228,7 +226,7 @@ impl super::BitField {
                 if bitfield.display.is_none() { return Ok(()); }
 
                 if let super::Data::Named(entries) = &bitfield.data {
-                    if entries.len() == 0 {
+                    if entries.is_empty() {
                         // Do not generate `Display` for bit fields with no fields or flags at all.
                         return Err(syn::Error::new(
                             bitfield.display.unwrap(),
@@ -373,9 +371,7 @@ impl super::BitField {
                     }
                 } else if !has_flags {
                     if let Some(allow_overlaps) = &bitfield.attr.allow_overlaps {
-                        return Err(syn::Error::new(allow_overlaps.span(), format!(
-                            "unnecessary since no fields overlap"
-                        )));
+                        return Err(syn::Error::new(allow_overlaps.span(), "unnecessary since no fields overlap"));
                     }
                 }
 
@@ -438,7 +434,7 @@ impl syn::parse::Parse for super::Entry {
         let field = super::FieldDetails::parse(&mut attrs)?;
 
         if let Some(complete) = field.as_ref().and_then(|f| f.complete.as_ref()) {
-            if ty.get_ident().map(|i| crate::primitive::is_primitive(i)).unwrap_or_default() {
+            if ty.get_ident().map(crate::primitive::is_primitive).unwrap_or_default() {
                 return Err(syn::Error::new(complete.span(), "unnecessary for primitive types"));
             }
         }

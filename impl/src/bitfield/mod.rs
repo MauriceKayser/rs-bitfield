@@ -41,7 +41,7 @@ impl Data {
                 |e| &e.entry
             ).collect(),
 
-            Self::Tuple(entry) => vec!(entry)
+            Self::Tuple(entry) => vec![entry]
         }
     }
 
@@ -52,7 +52,7 @@ impl Data {
                 |e| &mut e.entry
             ).collect(),
 
-            Self::Tuple(entry) => vec!(entry)
+            Self::Tuple(entry) => vec![entry]
         }
     }
 }

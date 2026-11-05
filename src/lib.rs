@@ -937,7 +937,7 @@
 ///
 /// For flags the `core::ops::*` implementations are *not* generated under these conditions:
 /// - The flags are less visible than the bit field. Trait implementations of a `pub` bit field are
-/// `pub` themselves and would leak access to less visible flags.
+///   `pub` themselves and would leak access to less visible flags.
 ///
 ///     Negative example:
 ///
@@ -952,7 +952,7 @@
 ///     # }
 ///     ```
 /// - The primitive type is a `NonZero` variant. The explicit setter accessors return `Option<Self>`,
-/// which is not possible for the trait implementations.
+///   which is not possible for the trait implementations.
 ///
 ///     Negative example:
 ///
@@ -1032,7 +1032,7 @@
 ///
 /// For fields the `core::ops::*` implementations are *not* generated under these conditions:
 /// - The field is less visible than the bit field. Trait implementations of a `pub` bit field are
-/// `pub` themselves and would leak access to a less visible field.
+///   `pub` themselves and would leak access to a less visible field.
 ///
 ///     Negative example:
 ///
@@ -1047,7 +1047,7 @@
 ///     # }
 ///     ```
 /// - The primitive type is a `NonZero` variant. The explicit setter accessors return `Option<Self>`,
-/// which is not possible for the trait implementations.
+///   which is not possible for the trait implementations.
 ///
 ///     Negative example:
 ///
@@ -1062,7 +1062,7 @@
 ///     # }
 ///     ```
 /// - The type of the field is used more than once in the bit field. The implementation can not know
-/// which field to access.
+///   which field to access.
 ///
 ///     Negative example:
 ///

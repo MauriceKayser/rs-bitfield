@@ -57,13 +57,13 @@ impl super::Field {
 }
 
 /// Generates the user code for the parsed field of a bit field.
-impl core::convert::Into<proc_macro2::TokenStream> for super::Field {
-    fn into(self) -> proc_macro2::TokenStream {
-        let ident = &self.0.ident;
+impl core::convert::From<super::Field> for proc_macro2::TokenStream {
+    fn from(value: super::Field) -> Self {
+        let ident = &value.0.ident;
 
-        let iter = self.generate_iter();
-        let size = self.generate_size();
-        let try_from = self.0.generate_try_from();
+        let iter = value.generate_iter();
+        let size = value.generate_size();
+        let try_from = value.0.generate_try_from();
 
         quote::quote! {
             impl #ident {

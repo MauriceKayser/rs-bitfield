@@ -138,7 +138,6 @@ impl super::BitField {
             let bit = field.bit.as_ref().unwrap().base10_parse::<u8>().unwrap();
             let size = field.size.as_ref().unwrap().base10_parse::<u8>().unwrap();
 
-
             // Special handling for primitive types.
             if let Some(ty) = ty.get_ident() {
                 if crate::primitive::is_bool(ty) {
@@ -196,6 +195,8 @@ impl super::BitField {
                         true => quote::quote!(self._set_field(#bit, #size, value as _)),
                     };
 
+                    let one = syn::LitInt::new(&format!("1_{ty}"), self.ident.span());
+
                     return if crate::primitive::primitive_bits(ty).unwrap() != size {
                         // Fields with a size < bits_of(FieldPrimitive).
                         quote::quote_spanned! { span =>
@@ -217,7 +218,7 @@ impl super::BitField {
                             #[inline(always)]
                             #[must_use = "leaves `self` unmodified and returns a modified variant"]
                             #vis const fn #setter(&self, value: #ty) -> ::core::option::Option<Self> {
-                                if value >= (1 as #ty).wrapping_shl(#size as u32) {
+                                if value >= #one.wrapping_shl(#size as u32) {
                                     return None;
                                 }
 
@@ -311,19 +312,19 @@ impl super::BitField {
             let unraw = getter.unraw();
 
             let getter_mask = syn::Ident::new(
-                &format!("{}_mask", &unraw), getter.span()
+                &format!("{unraw}_mask"), getter.span()
             );
             let getter_all = syn::Ident::new(
-                &format!("{}_all", &unraw), getter.span()
+                &format!("{unraw}_all"), getter.span()
             );
             let getter_any = syn::Ident::new(
-                &format!("{}_any", &unraw), getter.span()
+                &format!("{unraw}_any"), getter.span()
             );
             let setter_all = syn::Ident::new(
-                &format!("{}_all", setter), setter.span()
+                &format!("{setter}_all"), setter.span()
             );
             let setter_none = syn::Ident::new(
-                &format!("{}_none", setter), setter.span()
+                &format!("{setter}_none"), setter.span()
             );
 
             let primitive_type = &self.attr.primitive_type;
@@ -422,16 +423,16 @@ impl super::BitField {
     fn generate_accessors(&self) -> proc_macro2::TokenStream {
         let fields = match &self.data {
             super::Data::Named(entries) => {
-                let mut fields = vec!();
+                let mut fields = vec![];
 
                 for entry in entries {
                     let unraw = entry.ident.unraw();
 
                     fields.push(Self::generate_accessor(
-                        &self, &entry.entry, &entry.ident, &syn::Ident::new(
-                            &format!("set_{}", &unraw), entry.ident.span()
+                        self, &entry.entry, &entry.ident, &syn::Ident::new(
+                            &format!("set_{unraw}"), entry.ident.span()
                         ), &syn::Ident::new(
-                            &format!("invert_{}", &unraw), entry.ident.span()
+                            &format!("invert_{unraw}"), entry.ident.span()
                         ), entry.ident.span(),
                         entries.len() == 1
                     ));
@@ -441,8 +442,8 @@ impl super::BitField {
             },
 
             super::Data::Tuple(entry) => {
-                vec!(Self::generate_accessor(
-                    &self, entry,
+                vec![Self::generate_accessor(
+                    self, entry,
                     &syn::Ident::new(
                         if entry.field.is_some() { "get" } else { "has" },
                         entry.ty.span()
@@ -451,7 +452,7 @@ impl super::BitField {
                     &syn::Ident::new("invert", entry.ty.span()),
                     entry.ty.span(),
                     true
-                ))
+                )]
             }
         };
 
@@ -483,7 +484,7 @@ impl super::BitField {
         for ty in self.data
             .entries()
             .iter()
-            .filter_map(|x| x.field.is_some().then(|| &x.ty))
+            .filter(|x| x.field.is_some()).map(|x| &x.ty)
         {
             let ty = quote::quote!(#ty).to_string();
 
@@ -495,7 +496,7 @@ impl super::BitField {
         }
 
         // Collect all operator implementations.
-        let mut implementations = vec!();
+        let mut implementations = vec![];
 
         match &self.data {
             super::Data::Named(entries) => {
@@ -515,8 +516,8 @@ impl super::BitField {
                         if let Some(occurrences) = field_type_occurrences.get(&ty) {
                             if *occurrences == 1 {
                                 implementations.push(Self::generate_accessor_ops_field(
-                                    &self, &entry.entry.ty, &syn::Ident::new(
-                                        &format!("set_{}", &unraw), entry.ident.span()
+                                    self, &entry.entry.ty, &syn::Ident::new(
+                                        &format!("set_{unraw}"), entry.ident.span()
                                     ), entry.ident.span()
                                 ));
                             }
@@ -524,10 +525,10 @@ impl super::BitField {
                     } else {
                         if Self::cmp_vis(&entry.entry.vis, &self.vis) >= 0 {
                             implementations.push(Self::generate_accessor_ops_flags(
-                                &self, &entry.entry.ty, &syn::Ident::new(
-                                    &format!("set_{}", &unraw), entry.ident.span()
+                                self, &entry.entry.ty, &syn::Ident::new(
+                                    &format!("set_{unraw}"), entry.ident.span()
                                 ),&syn::Ident::new(
-                                    &format!("invert_{}", &unraw), entry.ident.span()
+                                    &format!("invert_{unraw}"), entry.ident.span()
                                 ), entry.ident.span()
                             ));
                         }
@@ -538,7 +539,7 @@ impl super::BitField {
             super::Data::Tuple(entry) => {
                 if entry.field.is_some() {
                     if !entry.ty.get_ident()
-                        .map(|i| crate::primitive::is_primitive(i))
+                        .map(crate::primitive::is_primitive)
                         .unwrap_or_default()
                     {
                         let ty = &entry.ty;
@@ -547,7 +548,7 @@ impl super::BitField {
                         if let Some(occurrences) = field_type_occurrences.get(&ty) {
                             if *occurrences == 1 {
                                 implementations.push(Self::generate_accessor_ops_field(
-                                    &self, &entry.ty,
+                                    self, &entry.ty,
                                     &syn::Ident::new("set", entry.ty.span()),
                                     entry.ty.span()
                                 ));
@@ -557,7 +558,7 @@ impl super::BitField {
                 } else {
                     if Self::cmp_vis(&entry.vis, &self.vis) >= 0 {
                         implementations.push(Self::generate_accessor_ops_flags(
-                            &self, &entry.ty,
+                            self, &entry.ty,
                             &syn::Ident::new("set", entry.ty.span()),
                             &syn::Ident::new("invert", entry.ty.span()),
                             entry.ty.span()
@@ -681,6 +682,8 @@ impl super::BitField {
             quote::quote!(self.0.get())
         )};
 
+        let one = syn::LitInt::new(&format!("1_{primitive_type}"), self.ident.span());
+
         quote::quote! {
             impl #ident {
                 /// Returns a boolean value whether the specified flag is set.
@@ -700,7 +703,7 @@ impl super::BitField {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> #constructor_type {
-                    let result = #destructor ^ ((1 as #primitive_type) << position);
+                    let result = #destructor ^ (#one << position);
                     #constructor
                 }
 
@@ -714,9 +717,8 @@ impl super::BitField {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -770,6 +772,7 @@ impl super::BitField {
                 );
 
                 // Only generate this check for non-primitive types.
+                #[allow(clippy::obfuscated_if_else)]
                 let non_primitive_assertion = ty.get_ident()
                     .map(|ident| !crate::primitive::is_primitive(ident))
                     .unwrap_or_default()
@@ -817,7 +820,7 @@ impl super::BitField {
                 // `bits_of(BitField)` must not be < `bits_of(Field) + size_of(Field)`.
                 let size_assertion = generate_assertion(
                     &syn::Ident::new(&format!("_FIELD_{i}_EXCEEDS_THE_BITFIELD_SIZE"), field.span),
-                    &format!("Field exceeds the bitfield size"),
+                    "Field exceeds the bitfield size",
                     quote::quote! { ::core::mem::size_of::<#base_type>() * 8 >= #bit + #size },
                     field.span
                 );
@@ -994,7 +997,7 @@ impl super::BitField {
             ));
         }
 
-        if assertions.len() == 0 { return proc_macro2::TokenStream::new(); }
+        if assertions.is_empty() { return proc_macro2::TokenStream::new(); }
 
         quote::quote! {
             impl #ident {
@@ -1045,7 +1048,7 @@ impl super::BitField {
 
         let fields = match &self.data {
             super::Data::Named(entries) => {
-                let mut fields = vec!();
+                let mut fields = vec![];
 
                 for entry in entries {
                     let ident = &entry.ident;
@@ -1078,7 +1081,7 @@ impl super::BitField {
                                 }
                             }
 
-                            s.field(::core::stringify!(#unraw), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(#unraw), &BitFieldDebugImplementor(self));
                         }}
                     });
                 }
@@ -1090,7 +1093,7 @@ impl super::BitField {
                 let ty = &entry.ty;
                 let span = entry.ty.span();
 
-                vec!(if entry.field.is_some()
+                vec![if entry.field.is_some()
                 {
                     // Display fields as a normal struct field.
                     let ident = &ty.segments.last().unwrap().ident;
@@ -1106,7 +1109,7 @@ impl super::BitField {
                             s.field(&alloc::format!("{:?}", flag), &self.has(*flag));
                         }
                     }
-                })
+                }]
             }
         };
 
@@ -1173,7 +1176,7 @@ impl super::BitField {
 
         match &self.data {
             super::Data::Named(entries) => {
-                if entries.len() == 0 {
+                if entries.is_empty() {
                     // Do not generate `Display` for bit fields with no fields or flags at all.
                     // Should have been checked in `parse::validate_display`.
                     panic!("can not generate `Display` for empty bit fields");
@@ -1274,16 +1277,16 @@ impl super::BitField {
 }
 
 /// Generates the user code for the parsed bit field.
-impl ::core::convert::Into<proc_macro2::TokenStream> for super::BitField {
-    fn into(self) -> proc_macro2::TokenStream {
-        let field = self.generate_struct();
-        let implementation = self.generate_impl();
-        let accessors_low = self.generate_accessors_low();
-        let accessors = self.generate_accessors();
-        let accessors_ops = self.generate_accessors_ops();
-        let assertions = self.generate_assertions();
-        let debug = self.generate_debug();
-        let display = self.generate_display();
+impl ::core::convert::From<super::BitField> for proc_macro2::TokenStream {
+    fn from(value: super::BitField) -> Self {
+        let field = value.generate_struct();
+        let implementation = value.generate_impl();
+        let accessors_low = value.generate_accessors_low();
+        let accessors = value.generate_accessors();
+        let accessors_ops = value.generate_accessors_ops();
+        let assertions = value.generate_assertions();
+        let debug = value.generate_debug();
+        let display = value.generate_display();
 
         quote::quote! {
             #field
@@ -2299,7 +2302,7 @@ mod tests {
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: u8) -> ::core::option::Option<Self> {
-                if value >= (1 as u8).wrapping_shl(2u8 as u32) { return None; }
+                if value >= 1_u8.wrapping_shl(2u8 as u32) { return None; }
 
                 Some(self._set_field(3u8, 2u8, value as _))
             }
@@ -2320,7 +2323,7 @@ mod tests {
             #[inline(always)]
             #[must_use = "leaves `self` unmodified and returns a modified variant"]
             const fn test_set(&self, value: u8) -> ::core::option::Option<Self> {
-                if value >= (1 as u8).wrapping_shl(2u8 as u32) { return None; }
+                if value >= 1_u8.wrapping_shl(2u8 as u32) { return None; }
 
                 self._set_field(3u8, 2u8, value as _)
             }
@@ -3408,7 +3411,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: u8) -> ::core::option::Option<Self> {
-                    if value >= (1 as u8).wrapping_shl(1u8 as u32) { return None; }
+                    if value >= 1_u8.wrapping_shl(1u8 as u32) { return None; }
 
                     Some(self._set_field(0u8, 1u8, value as _))
                 }
@@ -3431,7 +3434,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set(&self, value: u8) -> ::core::option::Option<Self> {
-                    if value >= (1 as u8).wrapping_shl(1u8 as u32) { return None; }
+                    if value >= 1_u8.wrapping_shl(1u8 as u32) { return None; }
 
                     self._set_field(0u8, 1u8, value as _)
                 }
@@ -3455,7 +3458,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: u8) -> ::core::option::Option<Self> {
-                    if value >= (1 as u8).wrapping_shl(1u8 as u32) { return None; }
+                    if value >= 1_u8.wrapping_shl(1u8 as u32) { return None; }
 
                     Some(self._set_field(0u8, 1u8, value as _))
                 }
@@ -3478,7 +3481,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: u8) -> ::core::option::Option<Self> {
-                    if value >= (1 as u8).wrapping_shl(1u8 as u32) { return None; }
+                    if value >= 1_u8.wrapping_shl(1u8 as u32) { return None; }
 
                     self._set_field(0u8, 1u8, value as _)
                 }
@@ -3792,7 +3795,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> Self {
-                    let result = self.0 ^ ((1 as u8) << position);
+                    let result = self.0 ^ (1_u8 << position);
                     Self(result)
                 }
 
@@ -3806,9 +3809,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -3853,7 +3855,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> ::core::option::Option<Self> {
-                    let result = self.0.get() ^ ((1 as u8) << position);
+                    let result = self.0.get() ^ (1_u8 << position);
                     match ::core::num::NonZeroU8::new(result) {
                         Some(result) => Some(Self(result)),
                         None => None
@@ -3870,9 +3872,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -3918,7 +3919,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> Self {
-                    let result = self.0 ^ ((1 as u16) << position);
+                    let result = self.0 ^ (1_u16 << position);
                     Self(result)
                 }
 
@@ -3932,9 +3933,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -3979,7 +3979,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> ::core::option::Option<Self> {
-                    let result = self.0.get() ^ ((1 as u16) << position);
+                    let result = self.0.get() ^ (1_u16 << position);
                     match ::core::num::NonZeroU16::new(result) {
                         Some(result) => Some(Self(result)),
                         None => None
@@ -3996,9 +3996,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -4044,7 +4043,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> Self {
-                    let result = self.0 ^ ((1 as u32) << position);
+                    let result = self.0 ^ (1_u32 << position);
                     Self(result)
                 }
 
@@ -4058,9 +4057,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -4105,7 +4103,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> ::core::option::Option<Self> {
-                    let result = self.0.get() ^ ((1 as u32) << position);
+                    let result = self.0.get() ^ (1_u32 << position);
                     match ::core::num::NonZeroU32::new(result) {
                         Some(result) => Some(Self(result)),
                         None => None
@@ -4122,9 +4120,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -4170,7 +4167,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> Self {
-                    let result = self.0 ^ ((1 as u64) << position);
+                    let result = self.0 ^ (1_u64 << position);
                     Self(result)
                 }
 
@@ -4184,9 +4181,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -4231,7 +4227,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> ::core::option::Option<Self> {
-                    let result = self.0.get() ^ ((1 as u64) << position);
+                    let result = self.0.get() ^ (1_u64 << position);
                     match ::core::num::NonZeroU64::new(result) {
                         Some(result) => Some(Self(result)),
                         None => None
@@ -4248,9 +4244,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -4296,7 +4291,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> Self {
-                    let result = self.0 ^ ((1 as u128) << position);
+                    let result = self.0 ^ (1_u128 << position);
                     Self(result)
                 }
 
@@ -4310,9 +4305,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -4357,7 +4351,7 @@ mod tests {
                 /// Returns a modified instance with the bit value inverted.
                 #[inline(always)]
                 const fn _invert_bit(&self, position: u8) -> ::core::option::Option<Self> {
-                    let result = self.0.get() ^ ((1 as u128) << position);
+                    let result = self.0.get() ^ (1_u128 << position);
                     match ::core::num::NonZeroU128::new(result) {
                         Some(result) => Some(Self(result)),
                         None => None
@@ -4374,9 +4368,8 @@ mod tests {
 
                     let limit = bit.wrapping_shl(rest as u32);
                     let mask = limit.wrapping_sub((size > 0) as _);
-                    let result = shifted & mask;
 
-                    result
+                    shifted & mask
                 }
 
                 /// Returns a modified variant with the field set to the specified value.
@@ -4423,7 +4416,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: u8) -> ::core::option::Option<Self> {
-                    if value >= (1 as u8).wrapping_shl(1u8 as u32) { return None; }
+                    if value >= 1_u8.wrapping_shl(1u8 as u32) { return None; }
                     Some(self._set_field(0u8, 1u8, value as _))
                 }
 
@@ -4513,7 +4506,7 @@ mod tests {
                 #[inline(always)]
                 #[must_use = "leaves `self` unmodified and returns a modified variant"]
                 const fn set_b(&self, value: u8) -> ::core::option::Option<Self> {
-                    if value >= (1 as u8).wrapping_shl(1u8 as u32) { return None; }
+                    if value >= 1_u8.wrapping_shl(1u8 as u32) { return None; }
                     self._set_field(0u8, 1u8, value as _)
                 }
 
@@ -5268,7 +5261,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(self));
                         }
 
                         s.finish()
@@ -5299,7 +5292,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(self));
                         }
 
                         let value = self.c();
@@ -5325,7 +5318,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(d), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(d), &BitFieldDebugImplementor(self));
                         }
 
                         s.finish()
@@ -5356,7 +5349,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(self));
                         }
 
                         {
@@ -5374,7 +5367,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(c), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(c), &BitFieldDebugImplementor(self));
                         }
 
                         s.finish()
@@ -5469,7 +5462,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(self));
                         }
 
                         s.finish()
@@ -5809,7 +5802,7 @@ mod tests {
                     /// Returns a modified instance with the bit value inverted.
                     #[inline(always)]
                     const fn _invert_bit(&self, position: u8) -> Self {
-                        let result = self.0 ^ ((1 as u16) << position);
+                        let result = self.0 ^ (1_u16 << position);
                         Self(result)
                     }
 
@@ -5823,9 +5816,8 @@ mod tests {
 
                         let limit = bit.wrapping_shl(rest as u32);
                         let mask = limit.wrapping_sub((size > 0) as _);
-                        let result = shifted & mask;
 
-                        result
+                        shifted & mask
                     }
 
                     /// Returns a modified variant with the field set to the specified value.
@@ -6244,7 +6236,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(self));
                         }
 
                         let value = self.r#c();
@@ -6269,7 +6261,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(d), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(d), &BitFieldDebugImplementor(self));
                         }
 
                         s.finish()
@@ -6309,7 +6301,7 @@ mod tests {
                     /// Returns a modified instance with the bit value inverted.
                     #[inline(always)]
                     const fn _invert_bit(&self, position: u8) -> ::core::option::Option<Self> {
-                        let result = self.0.get() ^ ((1 as u16) << position);
+                        let result = self.0.get() ^ (1_u16 << position);
                         match ::core::num::NonZeroU16::new(result) {
                             Some(result) => Some(Self(result)),
                             None => None
@@ -6326,9 +6318,8 @@ mod tests {
 
                         let limit = bit.wrapping_shl(rest as u32);
                         let mask = limit.wrapping_sub((size > 0) as _);
-                        let result = shifted & mask;
 
-                        result
+                        shifted & mask
                     }
 
                     /// Returns a modified variant with the field set to the specified value.
@@ -6696,7 +6687,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(b), &BitFieldDebugImplementor(self));
                         }
 
                         let value = self.c();
@@ -6721,7 +6712,7 @@ mod tests {
                                 }
                             }
 
-                            s.field(::core::stringify!(d), &BitFieldDebugImplementor(&self));
+                            s.field(::core::stringify!(d), &BitFieldDebugImplementor(self));
                         }
 
                         s.finish()
