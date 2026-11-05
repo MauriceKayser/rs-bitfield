@@ -1,16 +1,14 @@
-error[E0080]: evaluation of constant value failed
+error[E0080]: evaluation panicked: Size of the field type exceeds the specified field size of 1 bit
  --> tests/ui/bitfield/field_value_out_of_bounds_signed_8_1_i16.rs:6:36
   |
 6 | struct BitField(#[field(size = 1)] Field);
-  |                                    ^^^^^ the evaluated program panicked at 'Size of the field type exceeds the specified field size of 1 bit', $DIR/tests/ui/bitfield/field_value_out_of_bounds_signed_8_1_i16.rs:6:36
-  |
-  = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
+  |                                    ^^^^^ evaluation of `BitField::_TYPE_IN_FIELD_0_EXCEEDS_FIELD_SIZE_OF_1_BIT::{constant#0}` failed here
 
-error[E0599]: the variant or associated item `_bitfield_extract_primitive` exists for enum `Field`, but its trait bounds were not satisfied
+error[E0599]: the variant, associated function, or constant `_bitfield_extract_primitive` exists for enum `Field`, but its trait bounds were not satisfied
   --> tests/ui/bitfield/field_value_out_of_bounds_signed_8_1_i16.rs:6:36
    |
-6  | struct BitField(#[field(size = 1)] Field);
-   |                                    ^^^^^ variant or associated item cannot be called on `Field` due to unsatisfied trait bounds
+ 6 | struct BitField(#[field(size = 1)] Field);
+   |                                    ^^^^^ variant, associated function, or constant cannot be called on `Field` due to unsatisfied trait bounds
 ...
 10 | enum Field {
    | ---------- doesn't satisfy 6 bounds
@@ -30,12 +28,15 @@ note: the following trait bounds were not satisfied:
       `Field: TryFrom<u8>`
   --> tests/ui/bitfield/field_value_out_of_bounds_signed_8_1_i16.rs:6:32
    |
-6  | struct BitField(#[field(size = 1)] Field);
+ 6 | struct BitField(#[field(size = 1)] Field);
    |                                ^^^^^^^^^
    |                                |
    |                                unsatisfied trait bound introduced here
 note: the trait `TryFrom` must be implemented
-  --> /builddir/build/BUILD/rustc-1.86.0-src/library/core/src/convert/mod.rs:681:1
+  --> $RUST/core/src/convert/mod.rs
+   |
+   | pub const trait TryFrom<T>: Sized {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    = help: items from traits can only be used if the trait is implemented and in scope
    = note: the following traits define an item `_bitfield_extract_primitive`, perhaps you need to implement one of them:
            candidate #1: `BitFieldExtractionSigned`

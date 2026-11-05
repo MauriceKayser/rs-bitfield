@@ -1,7 +1,5 @@
-error[E0080]: evaluation of constant value failed
+error[E0080]: evaluation panicked: Flags must be #[repr(u8)]
  --> tests/ui/bitfield/flags_not_repr_u8.rs:6:17
   |
 6 | struct BitField(Flags);
-  |                 ^^^^^ the evaluated program panicked at 'Flags must be #[repr(u8)]', $DIR/tests/ui/bitfield/flags_not_repr_u8.rs:6:17
-  |
-  = note: this error originates in the macro `$crate::panic::panic_2021` which comes from the expansion of the macro `panic` (in Nightly builds, run with -Z macro-backtrace for more info)
+  |                 ^^^^^ evaluation of `BitField::_FLAGS_IN_FIELD_0_MUST_BE_REPR_U8::{constant#0}` failed here
